@@ -15,7 +15,13 @@ import com.example.greengrid.ui.StromboerseScreen
 import com.example.greengrid.ui.ForecastScreen
 import com.example.greengrid.ui.SettingsScreen
 import com.example.greengrid.ui.PriceAlertScreen
+import com.example.greengrid.ui.AchievementsScreen
 import com.example.greengrid.data.LoginPreferences
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 
 class MainActivity : ComponentActivity() {
     private val repository = FirebaseRepository()
@@ -25,7 +31,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             GreenGridTheme {
-                var currentScreen by remember { mutableStateOf("login") }
+                var currentScreen by remember { mutableStateOf("loading") }
                 var currentUser by remember { mutableStateOf<User?>(null) }
                 var currentName by remember { mutableStateOf("") }
                 var priceHistory by remember { mutableStateOf<List<PricePoint>>(emptyList()) }
@@ -44,15 +50,27 @@ class MainActivity : ComponentActivity() {
                                 },
                                 onFailure = { e ->
                                     loginPreferences.clearLoginData()
+                                    currentScreen = "login"
                                 }
                             )
                         } catch (e: Exception) {
                             loginPreferences.clearLoginData()
+                            currentScreen = "login"
                         }
+                    } else {
+                        currentScreen = "login"
                     }
                 }
 
                 when (currentScreen) {
+                    "loading" -> {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator()
+                        }
+                    }
                     "login" -> AuthScreen(
                         onAuthSuccess = { user ->
                             currentUser = user
@@ -66,6 +84,7 @@ class MainActivity : ComponentActivity() {
                         onNavigateToSettings = { currentScreen = "settings" },
                         onNavigateToStromboerse = { currentScreen = "stromboerse" },
                         onNavigateToPriceAlert = { currentScreen = "pricealert" },
+                        onNavigateToAchievements = { currentScreen = "achievements" },
                         currentName = currentName,
                         user = currentUser!!
                     )
@@ -92,6 +111,9 @@ class MainActivity : ComponentActivity() {
                     )
                     "pricealert" -> PriceAlertScreen(
                         onNavigateToHome = { currentScreen = "home" }
+                    )
+                    "achievements" -> AchievementsScreen(
+                        onNavigateBack = { currentScreen = "home" }
                     )
                 }
             }

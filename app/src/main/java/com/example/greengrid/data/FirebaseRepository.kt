@@ -14,39 +14,15 @@ import kotlinx.coroutines.tasks.await
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import kotlin.math.exp
-import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.DocumentSnapshot
+import kotlin.math.abs
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 class FirebaseRepository {
     private val auth = Firebase.auth
-    private val database = Firebase.database
-    private val firestore = FirebaseFirestore.getInstance()
-    private val usersCollection = firestore.collection("users")
-    private val tradesCollection = firestore.collection("trades")
-    private val marketStateCollection = firestore.collection("marketState")
-
-    // Authentifizierung
-    suspend fun signUp(email: String, password: String, username: String): Result<User> {
-        return try {
-            val result = auth.createUserWithEmailAndPassword(email, password).await()
-            result.user?.let { firebaseUser ->
-                val user = User(
-                    id = firebaseUser.uid,
-                    email = email,
-                    username = username,
-                    balance = 1000.0,
-                    capacity = 0.0,
-                    maxCapacity = 100.0,
-                    totalBought = 0.0,
-                    totalSold = 0.0
-                )
-                database.getReference("users/${user.id}").setValue(user).await()
-                Result.success(user)
-            } ?: Result.failure(Exception("Benutzer konnte nicht erstellt werden"))
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
+    private val database = Firebase.database("https://greengrid-c6bc8-default-rtdb.europe-west1.firebasedatabase.app/")
+    private val achievementManager = AchievementManager(database)
 
     suspend fun signIn(email: String, password: String): Result<User> {
         return try {
@@ -65,48 +41,26 @@ class FirebaseRepository {
         }
     }
 
-    fun observeMarketState(): Flow<MarketState> = callbackFlow {
-        val listener = database.getReference("market/state")
-            .addValueEventListener(object : ValueEventListener {
-                override fun onDataChange(snapshot: DataSnapshot) {
-                    val state = snapshot.getValue(MarketState::class.java) ?: MarketState()
-                    trySend(state)
-                }
-
-                override fun onCancelled(error: DatabaseError) {
-                    close(error.toException())
-                }
-            })
-        awaitClose { database.getReference("market/state").removeEventListener(listener) }
-    }
-
-    fun observePriceHistory(): Flow<List<PricePoint>> = callbackFlow {
-        val listener = database.getReference("market/prices")
-            .addValueEventListener(object : ValueEventListener {
-                override fun onDataChange(snapshot: DataSnapshot) {
-                    val prices = snapshot.children.mapNotNull {
-                        it.getValue(PricePoint::class.java)
-                    }.sortedBy { it.timestamp }
-                    trySend(prices)
-                }
-
-                override fun onCancelled(error: DatabaseError) {
-                    close(error.toException())
-                }
-            })
-        awaitClose { database.getReference("market/prices").removeEventListener(listener) }
-    }
-
     fun observeUserData(): Flow<User> = callbackFlow {
         val userId = auth.currentUser?.uid ?: throw Exception("User not logged in")
+        Log.d("FirebaseRepository", "Observing user data for ID: $userId")
+        
         val listener = database.getReference("users/$userId")
             .addValueEventListener(object : ValueEventListener {
                 override fun onDataChange(snapshot: DataSnapshot) {
-                    val user = snapshot.getValue(User::class.java) ?: User()
-                    trySend(user)
+                    val user = snapshot.getValue(User::class.java)
+                    if (user != null) {
+                        // Ensure the user ID is set correctly
+                        val updatedUser = user.copy(id = userId)
+                        Log.d("FirebaseRepository", "User data updated: $updatedUser")
+                        trySend(updatedUser)
+                    } else {
+                        Log.e("FirebaseRepository", "No user data found for ID: $userId")
+                    }
                 }
 
                 override fun onCancelled(error: DatabaseError) {
+                    Log.e("FirebaseRepository", "Error observing user data", error.toException())
                     close(error.toException())
                 }
             })
@@ -116,100 +70,110 @@ class FirebaseRepository {
     suspend fun executeTrade(trade: Trade): Result<Unit> {
         return try {
             val userId = auth.currentUser?.uid ?: throw Exception("User not logged in")
-            val tradeWithUser = trade.copy(userId = userId)
             val userRef = database.getReference("users/$userId")
             val userSnapshot = userRef.get().await()
             val user = userSnapshot.getValue(User::class.java) ?: throw Exception("User not found")
 
-            Log.d("TradeDebug", "Starting trade execution:")
-            Log.d("TradeDebug", "User before trade - Balance: ${user.balance}, Capacity: ${user.capacity}")
-            Log.d("TradeDebug", "Trade details - Amount: ${trade.amount}, Price: ${trade.price}, IsBuy: ${trade.isBuy}")
-
             if (trade.isBuy && user.capacity + trade.amount > user.maxCapacity) {
-                Log.d("TradeDebug", "Trade rejected: Not enough storage capacity")
                 return Result.failure(Exception("Nicht genug Speicherplatz!"))
             }
 
             if (!trade.isBuy && user.capacity < trade.amount) {
-                Log.d("TradeDebug", "Trade rejected: Not enough electricity in storage")
                 return Result.failure(Exception("Nicht genug Strom im Speicher!"))
             }
 
-            // Merke alten Stromwert
-            val oldTotalValue = user.balance + user.capacity * trade.price / 100.0
+            // Berechne die Steuer (10%)
+            val tax = trade.amount * 0.05
+            val finalAmount = trade.amount - tax // Abzüge der Steuer vom Handelsbetrag
 
-            // Calculate new balance and capacity
-            val tradeValue = trade.amount * trade.price / 100.0
+            // Berechne die neue Balance
             val newBalance = if (trade.isBuy) {
-                user.balance - tradeValue  // Beim Kauf wird Geld abgezogen
+                user.balance - finalAmount
             } else {
-                user.balance + tradeValue  // Beim Verkauf wird Geld hinzugefügt
-            }
-            val newCapacity = if (trade.isBuy) {
-                user.capacity + trade.amount  // Beim Kauf wird Kapazität erhöht
-            } else {
-                user.capacity - trade.amount  // Beim Verkauf wird Kapazität verringert
+                user.balance + finalAmount
             }
 
-            // Update user data first (vorläufig)
-            var updatedUser = user.copy(
+            // Berechne die neue Kapazität
+            val newCapacity = if (trade.isBuy) {
+                user.capacity + trade.amount
+            } else {
+                user.capacity - trade.amount
+            }
+
+            // Berechne die CO2-Einsparung basierend auf der tatsächlichen Energiespeicherung
+            val co2Saved = if (trade.isBuy) {
+                // Beim Kauf: Keine CO2-Einsparung, da der Strom erst gespeichert wird
+                0.0
+            } else {
+                // Beim Verkauf: CO2-Einsparung basierend auf der gespeicherten Zeit
+                // Annahme: Durchschnittlicher CO2-Ausstoß pro kWh in Deutschland: ~400g
+                // Je länger der Strom gespeichert war, desto höher die Einsparung
+                val storageTimeHours = (System.currentTimeMillis() - user.lastStorageUpdate) / (1000.0 * 60 * 60)
+                val baseCo2Saving = 400.0 // Basis-CO2-Einsparung pro kWh
+                val timeMultiplier = minOf(storageTimeHours / 24.0, 1.0) // Maximaler Multiplikator nach 24h
+
+                trade.amount * baseCo2Saving * timeMultiplier
+            }
+            Log.d("FirebaseRepository", "Calculated CO2 savings: $co2Saved")
+
+            // Update user data
+            val updatedUser = user.copy(
+                id = userId, // Ensure ID is set correctly
                 balance = newBalance,
                 capacity = newCapacity,
                 totalBought = if (trade.isBuy) user.totalBought + trade.amount else user.totalBought,
-                totalSold = if (!trade.isBuy) user.totalSold + trade.amount else user.totalSold
+                totalSold = if (!trade.isBuy) user.totalSold + trade.amount else user.totalSold,
+                co2Saved = (user.co2Saved + co2Saved),
+                lastStorageUpdate = (if (trade.isBuy) System.currentTimeMillis() else user.lastStorageUpdate)
             )
 
             // Update user data in database
             userRef.setValue(updatedUser).await()
-            database.getReference("trades").push().setValue(tradeWithUser).await()
 
-            // Preisänderung im Markt
-            try {
-                val now = Instant.ofEpochMilli(System.currentTimeMillis())
-                val roundedHour = now.truncatedTo(ChronoUnit.HOURS)
-                val currentPriceRef = database.getReference("market/prices/price_${roundedHour.toEpochMilli()}")
-                val currentPriceSnapshot = currentPriceRef.get().await()
-                val currentPricePoint = currentPriceSnapshot.getValue(PricePoint::class.java)
-                val simPrices = simulatePriceHistory(
-                    rangeHours = PriceSimulationConfigs.defaultParams.rangeHours,
-                    basePrice = PriceSimulationConfigs.defaultParams.basePrice,
-                    seasonalAmp = PriceSimulationConfigs.defaultParams.seasonalAmp,
-                    dailyAmp = PriceSimulationConfigs.defaultParams.dailyAmp,
-                    weekendOffset = PriceSimulationConfigs.defaultParams.weekendOffset,
-                    noiseAmpLong = PriceSimulationConfigs.defaultParams.noiseAmpLong,
-                    noiseAmpShort = PriceSimulationConfigs.defaultParams.noiseAmpShort,
-                    seedLong = PriceSimulationConfigs.defaultParams.seedLong,
-                    seedShort = PriceSimulationConfigs.defaultParams.seedShort,
-                    intervalHours = PriceSimulationConfigs.defaultParams.intervalHours
-                )
-                val basePrice = simPrices.last().price
-                val currentPrice = currentPricePoint?.price ?: basePrice
-                val tradeImpact = if (trade.isBuy) trade.amount * 0.005 else -trade.amount * 0.005
-                val newPrice = currentPrice + tradeImpact
-                val newPricePoint = PricePoint(
-                    timestamp = roundedHour.toEpochMilli(),
-                    price = newPrice,
-                    volume = (currentPricePoint?.volume ?: 0.0) + trade.amount
-                )
-                currentPriceRef.setValue(newPricePoint).await()
+            // Store the trade in the database with correct format
+            val tradeRef = database.getReference("market/trades").push()
+            val tradeData = mapOf(
+                "amount" to trade.amount,
+                "isBuy" to trade.isBuy,
+                "price" to trade.price,
+                "timestamp" to trade.timestamp,
+                "userId" to userId,
+                "tax" to tax,
+                "finalAmount" to finalAmount
+            )
+            tradeRef.setValue(tradeData).await()
 
-                // Berechne neuen Gesamtwert mit neuem Preis
-                val newTotalValue = newBalance + newCapacity * newPrice / 100.0
-                val diff = oldTotalValue - newTotalValue
-                if (diff != 0.0) {
-                    updatedUser = updatedUser.copy(balance = updatedUser.balance + diff)
-                    userRef.setValue(updatedUser).await()
-                }
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e("TradeDebug", "Error executing trade", e)
+            Result.failure(e)
+        }
+    }
 
-                // Aktualisiere die Preise für die nächsten Stunden
-                val decayHours = 6
-                val decayK = 0.7
-                for (n in 1 until decayHours) {
-                    val futureHour = roundedHour.plus(n.toLong(), ChronoUnit.HOURS)
-                    val futurePriceRef = database.getReference("market/prices/price_${futureHour.toEpochMilli()}")
-                    val futurePriceSnapshot = futurePriceRef.get().await()
-                    val futurePricePoint = futurePriceSnapshot.getValue(PricePoint::class.java)
-                    val futureBasePrice = simulatePriceHistory(
+    fun observePriceHistory(): Flow<List<PricePoint>> = callbackFlow {
+        val listener = database.getReference("market/trades")
+            .addValueEventListener(object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) {
+                    val trades = snapshot.children.mapNotNull { tradeSnapshot ->
+                        try {
+                            val data = tradeSnapshot.value as? Map<*, *> ?: return@mapNotNull null
+                            Trade(
+                                amount = (data["amount"] as? Number)?.toDouble() ?: return@mapNotNull null,
+                                isBuy = data["isBuy"] as? Boolean ?: return@mapNotNull null,
+                                price = (data["price"] as? Number)?.toDouble() ?: return@mapNotNull null,
+                                timestamp = (data["timestamp"] as? Number)?.toLong() ?: return@mapNotNull null,
+                                userId = data["userId"] as? String ?: return@mapNotNull null
+                            )
+                        } catch (e: Exception) {
+                            Log.e("FirebaseRepository", "Error parsing trade", e)
+                            null
+                        }
+                    }.sortedBy { it.timestamp }
+                    
+                    Log.d("FirebaseRepository", "Processing ${trades.size} trades")
+                    
+                    // Generate base price history
+                    val basePrices = simulatePriceHistory(
                         rangeHours = PriceSimulationConfigs.defaultParams.rangeHours,
                         basePrice = PriceSimulationConfigs.defaultParams.basePrice,
                         seasonalAmp = PriceSimulationConfigs.defaultParams.seasonalAmp,
@@ -220,88 +184,141 @@ class FirebaseRepository {
                         seedLong = PriceSimulationConfigs.defaultParams.seedLong,
                         seedShort = PriceSimulationConfigs.defaultParams.seedShort,
                         intervalHours = PriceSimulationConfigs.defaultParams.intervalHours
-                    ).last().price
-                    val currentFuturePrice = futurePricePoint?.price ?: futureBasePrice
-                    val futureImpact = tradeImpact * exp(-decayK * n)
-                    val newFuturePrice = currentFuturePrice + futureImpact
-                    val newFuturePricePoint = PricePoint(
-                        timestamp = futureHour.toEpochMilli(),
-                        price = newFuturePrice,
-                        volume = (futurePricePoint?.volume ?: 0.0) + trade.amount
                     )
-                    futurePriceRef.setValue(newFuturePricePoint).await()
-                }
-            } catch (e: Exception) {
-                Log.e("TradeDebug", "Error updating prices, but trade was successful", e)
-            }
 
-            Log.d("TradeDebug", "Trade execution completed successfully")
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Log.e("TradeDebug", "Error executing trade", e)
-            Result.failure(e)
-        }
-    }
-
-    fun observeUserTrades(): Flow<List<Trade>> = callbackFlow {
-        val listener = database.getReference("trades")
-            .addValueEventListener(object : ValueEventListener {
-                override fun onDataChange(snapshot: DataSnapshot) {
-                    val trades = snapshot.children.mapNotNull { it.getValue(Trade::class.java) }
-                        // filtere clientseitig nach aktuellem User
-                        .filter { it.userId == auth.currentUser?.uid }
-                        .sortedBy { it.timestamp }
-                    trySend(trades)
+                    Log.d("FirebaseRepository", "Generated ${basePrices.size} base price points")
+                    
+                    // Calculate price impact from trades
+                    val priceByHour = basePrices.associate { it.timestamp to it.price }.toMutableMap()
+                    val volumeByHour = basePrices.associate { it.timestamp to it.volume }.toMutableMap()
+                    
+                    val decayHours = 6
+                    val decayK = 0.7
+                    
+                    for (trade in trades) {
+                        val tradeHour = Instant.ofEpochMilli(trade.timestamp)
+                            .truncatedTo(ChronoUnit.HOURS)
+                            .toEpochMilli()
+                        
+                        // Calculate trade impact - FIXED: Now sells decrease price and buys increase it
+                        val baseImpact = if (trade.isBuy) {
+                            trade.amount * 0.02  // Kauf erhöht den Preis stärker
+                        } else {
+                            -trade.amount * 0.02  // Verkauf senkt den Preis stärker
+                        }
+                        
+                        Log.d("FirebaseRepository", "Trade: isBuy=${trade.isBuy}, amount=${trade.amount}, baseImpact=$baseImpact")
+                        
+                        // Apply impact to current hour and future hours
+                        for (n in 0 until decayHours) {
+                            val targetHour = tradeHour + n * 3600000 // Add n hours in milliseconds
+                            val currentPrice = priceByHour[targetHour] ?: continue
+                            
+                            // Berechne den Impact mit exponentieller Abnahme
+                            val impact = baseImpact * exp(-decayK * n)
+                            val newPrice = currentPrice + impact
+                            
+                            // Stelle sicher, dass der Preis nicht unter 0 fällt
+                            priceByHour[targetHour] = maxOf(0.0, newPrice)
+                            
+                            // Aktualisiere das Volumen
+                            volumeByHour[targetHour] = (volumeByHour[targetHour] ?: 0.0) + trade.amount
+                            
+                            Log.d("FirebaseRepository", "Hour $n: currentPrice=$currentPrice, impact=$impact, newPrice=${priceByHour[targetHour]}")
+                        }
+                    }
+                    
+                    // Convert to PricePoint list
+                    val pricePoints = priceByHour.map { (timestamp, price) ->
+                        PricePoint(
+                            timestamp = timestamp,
+                            price = price,
+                            volume = volumeByHour[timestamp] ?: 0.0
+                        )
+                    }.sortedBy { it.timestamp }
+                    
+                    Log.d("FirebaseRepository", "Final prices: first=${pricePoints.firstOrNull()?.price}, last=${pricePoints.lastOrNull()?.price}")
+                    trySend(pricePoints)
                 }
+
                 override fun onCancelled(error: DatabaseError) {
+                    Log.e("FirebaseRepository", "Error loading trade history", error.toException())
                     close(error.toException())
                 }
             })
-        awaitClose { database.getReference("trades").removeEventListener(listener) }
+        awaitClose { database.getReference("market/trades").removeEventListener(listener) }
     }
 
-    private fun DocumentSnapshot.toUser(): User? {
-        return try {
-            val data = data ?: return null
-            User(
-                id = id,
-                email = data["email"] as? String ?: "",
-                username = data["username"] as? String ?: "",
-                balance = (data["balance"] as? Number)?.toDouble() ?: 1000.0,
-                capacity = (data["capacity"] as? Number)?.toDouble() ?: 0.0,
-                maxCapacity = (data["maxCapacity"] as? Number)?.toDouble() ?: 100.0,
-                totalBought = (data["totalBought"] as? Number)?.toDouble() ?: 0.0,
-                totalSold = (data["totalSold"] as? Number)?.toDouble() ?: 0.0
-            )
+    suspend fun cleanupOldData() {
+        try {
+            // Delete trades older than 1 year
+            val now = Instant.now()
+            val oneYearAgo = now.minus(365, ChronoUnit.DAYS)
+            val tradesRef = database.getReference("market/trades")
+            val tradesSnapshot = tradesRef.get().await()
+            
+            var deletedCount = 0
+            for (tradeSnapshot in tradesSnapshot.children) {
+                try {
+                    val trade = tradeSnapshot.getValue(Trade::class.java)
+                    if (trade != null && trade.timestamp < oneYearAgo.toEpochMilli()) {
+                        tradeSnapshot.ref.removeValue().await()
+                        deletedCount++
+                    }
+                } catch (e: Exception) {
+                    Log.e("FirebaseRepository", "Error cleaning up trade data", e)
+                }
+            }
+            Log.d("FirebaseRepository", "Successfully cleaned up old trade data. Deleted $deletedCount old trades")
         } catch (e: Exception) {
-            null
+            Log.e("FirebaseRepository", "Error during data cleanup", e)
         }
     }
 
-    private fun DocumentSnapshot.toTrade(): Trade? {
-        return try {
-            val data = data ?: return null
-            Trade(
-                userId = data["userId"] as String,
-                amount = (data["amount"] as Number).toDouble(),
-                price = (data["price"] as Number).toDouble(),
-                isBuy = data["isBuy"] as Boolean,
-                timestamp = (data["timestamp"] as Number).toLong()
-            )
+    suspend fun readAllUsersDirectly(): List<User> {
+        Log.d("FirebaseRepository", "Starting direct user read")
+        val usersRef = database.getReference("users")
+        
+        try {
+            // Read all users in one go
+            val snapshot = usersRef.get().await()
+            val users = mutableListOf<User>()
+            
+            for (userSnapshot in snapshot.children) {
+                try {
+                    val id = userSnapshot.key ?: continue
+                    val data = userSnapshot.value as? Map<*, *> ?: continue
+                    
+                    users.add(User(
+                        id = id,
+                        email = data["email"] as? String ?: "",
+                        username = data["username"] as? String ?: "",
+                        balance = (data["balance"] as? Number)?.toDouble() ?: 0.0,
+                        capacity = (data["capacity"] as? Number)?.toDouble() ?: 0.0,
+                        maxCapacity = (data["maxCapacity"] as? Number)?.toDouble() ?: 100.0,
+                        totalBought = (data["totalBought"] as? Number)?.toDouble() ?: 0.0,
+                        totalSold = (data["totalSold"] as? Number)?.toDouble() ?: 0.0,
+                        co2Saved = (data["co2Saved"] as? Number)?.toDouble() ?: 0.0
+                    ))
+                } catch (e: Exception) {
+                    Log.e("FirebaseRepository", "Error processing user data for ID: ${userSnapshot.key}", e)
+                }
+            }
+            
+            Log.d("FirebaseRepository", "Successfully loaded ${users.size} users")
+            return users
         } catch (e: Exception) {
-            null
+            Log.e("FirebaseRepository", "Error reading users from database", e)
+            throw e
         }
     }
 
-    private fun DocumentSnapshot.toMarketState(): MarketState? {
+    suspend fun resetPassword(email: String): Result<Unit> {
         return try {
-            val data = data ?: return null
-            MarketState(
-                currentPrice = (data["currentPrice"] as Number).toDouble(),
-                lastUpdate = (data["lastUpdate"] as Number).toLong()
-            )
+            auth.sendPasswordResetEmail(email).await()
+            Result.success(Unit)
         } catch (e: Exception) {
-            null
+            Result.failure(e)
         }
     }
 } 

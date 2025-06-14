@@ -4,11 +4,13 @@ data class User(
     val id: String = "",
     val email: String = "",
     val username: String = "",
-    val balance: Double = 1000.0,
+    val balance: Double = 0.0,
     val capacity: Double = 0.0,
     val maxCapacity: Double = 100.0,
+    val co2Saved: Double = 0.0,
     val totalBought: Double = 0.0,
-    val totalSold: Double = 0.0
+    val totalSold: Double = 0.0,
+    val lastStorageUpdate: Long = System.currentTimeMillis()
 )
 
 data class Trade(
@@ -17,14 +19,6 @@ data class Trade(
     val price: Double = 0.0,
     val isBuy: Boolean = true,
     val timestamp: Long = 0L
-)
-
-data class MarketState(
-    val currentPrice: Double = 25.0,
-    val totalVolume: Double = 0.0,
-    val buyVolume: Double = 0.0,
-    val sellVolume: Double = 0.0,
-    val lastUpdate: Long = 0L
 )
 
 data class PricePoint(

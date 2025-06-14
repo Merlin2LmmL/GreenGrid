@@ -22,6 +22,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.work.*
+import com.example.greengrid.data.PricePoint
 import com.example.greengrid.data.fetchCurrentPrice
 import com.example.greengrid.data.findDailyPriceMinimum
 import com.example.greengrid.data.PriceMinimum
@@ -203,12 +204,14 @@ fun PriceAlertScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .padding(16.dp),
+            .padding(horizontal = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         // Top App Bar
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 48.dp, bottom = 24.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -376,54 +379,5 @@ fun PriceAlertScreen(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 16.dp)
         )
-
-        // Debug-Button für Test-Benachrichtigungen
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp)
-        ) {
-            Column(
-                modifier = Modifier
-                    .padding(16.dp)
-                    .fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    "Debug-Benachrichtigungen",
-                    style = MaterialTheme.typography.titleMedium
-                )
-                if (!hasNotificationPermission) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        "Benachrichtigungen sind deaktiviert",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error
-                    )
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceEvenly
-                ) {
-                    Button(
-                        onClick = { sendTestNotification() }
-                    ) {
-                        Text("Test Preis-Alarm")
-                    }
-                    Button(
-                        onClick = {
-                            if (hasNotificationPermission) {
-                                notificationManager.showMinPriceNotification(14, 12.5)
-                            } else {
-                                permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                            }
-                        }
-                    ) {
-                        Text("Test Tiefpunkt")
-                    }
-                }
-            }
-        }
     }
 } 

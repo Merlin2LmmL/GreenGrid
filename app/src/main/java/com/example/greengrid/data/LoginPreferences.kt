@@ -5,21 +5,68 @@ import android.content.SharedPreferences
 
 class LoginPreferences(context: Context) {
     private val prefs: SharedPreferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    
+    // Cache for frequently accessed values
+    private var cachedEmail: String? = null
+    private var cachedPassword: String? = null
+    private var cachedIsLoggedIn: Boolean? = null
 
     var email: String
-        get() = prefs.getString(KEY_EMAIL, "") ?: ""
-        set(value) = prefs.edit().putString(KEY_EMAIL, value).apply()
+        get() {
+            if (cachedEmail == null) {
+                cachedEmail = prefs.getString(KEY_EMAIL, "") ?: ""
+            }
+            return cachedEmail!!
+        }
+        set(value) {
+            cachedEmail = value
+            prefs.edit().putString(KEY_EMAIL, value).commit()
+        }
 
     var password: String
-        get() = prefs.getString(KEY_PASSWORD, "") ?: ""
-        set(value) = prefs.edit().putString(KEY_PASSWORD, value).apply()
+        get() {
+            if (cachedPassword == null) {
+                cachedPassword = prefs.getString(KEY_PASSWORD, "") ?: ""
+            }
+            return cachedPassword!!
+        }
+        set(value) {
+            cachedPassword = value
+            prefs.edit().putString(KEY_PASSWORD, value).commit()
+        }
 
     var isLoggedIn: Boolean
-        get() = prefs.getBoolean(KEY_LOGGED_IN, false)
-        set(value) = prefs.edit().putBoolean(KEY_LOGGED_IN, value).apply()
+        get() {
+            if (cachedIsLoggedIn == null) {
+                cachedIsLoggedIn = prefs.getBoolean(KEY_LOGGED_IN, false)
+            }
+            return cachedIsLoggedIn!!
+        }
+        set(value) {
+            cachedIsLoggedIn = value
+            prefs.edit().putBoolean(KEY_LOGGED_IN, value).commit()
+        }
 
     fun clearLoginData() {
-        prefs.edit().clear().apply()
+        // Clear cache
+        cachedEmail = null
+        cachedPassword = null
+        cachedIsLoggedIn = null
+        // Clear preferences
+        prefs.edit().clear().commit()
+    }
+
+    fun saveLoginData(email: String, password: String, isLoggedIn: Boolean) {
+        // Update cache
+        cachedEmail = email
+        cachedPassword = password
+        cachedIsLoggedIn = isLoggedIn
+        // Batch save to preferences
+        prefs.edit()
+            .putString(KEY_EMAIL, email)
+            .putString(KEY_PASSWORD, password)
+            .putBoolean(KEY_LOGGED_IN, isLoggedIn)
+            .commit()
     }
 
     companion object {

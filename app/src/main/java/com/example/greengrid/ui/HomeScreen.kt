@@ -8,11 +8,14 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.example.greengrid.data.User
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.ui.graphics.drawscope.Fill
+import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.ui.graphics.vector.ImageVector
 
 @Composable
 fun HomeScreen(
@@ -21,18 +24,21 @@ fun HomeScreen(
     onNavigateToForecast: () -> Unit,
     onNavigateToSettings: () -> Unit,
     onNavigateToPriceAlert: () -> Unit,
+    onNavigateToAchievements: () -> Unit,
     currentName: String
 ) {
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .padding(16.dp),
+            .padding(horizontal = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         // Top App Bar
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 48.dp, bottom = 24.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -46,123 +52,95 @@ fun HomeScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
-
-        Card(
+        // Grid of feature cards
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(8.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surface
-            ),
-            onClick = { onNavigateToStromboerse() }
+                .padding(bottom = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Column(
-                modifier = Modifier
-                    .padding(16.dp)
-                    .fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    "Simulierte Strombörse",
-                    fontSize = 20.sp,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    "Handeln Sie mit Strom, erleben Sie die Marktentwicklung und klettern sie an die Spitze des Leaderboards.",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+            FeatureCard(
+                title = "Strombörse",
+                description = "Handeln Sie mit Strom",
+                icon = Icons.Default.ShoppingCart,
+                onClick = onNavigateToStromboerse,
+                modifier = Modifier.weight(1f)
+            )
+            FeatureCard(
+                title = "Prognosen",
+                description = "24h Vorhersage",
+                icon = Icons.Default.Info,
+                onClick = onNavigateToForecast,
+                modifier = Modifier.weight(1f)
+            )
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Card(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(8.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surface
-            ),
-            onClick = { onNavigateToForecast() }
+                .padding(bottom = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Column(
-                modifier = Modifier
-                    .padding(16.dp)
-                    .fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    "24 Stunden Prognosen",
-                    fontSize = 20.sp,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    "Verfolgen Sie die kommenden Preise der europäischen Strombörse.",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+            FeatureCard(
+                title = "Preisalarm",
+                description = "Benachrichtigungen",
+                icon = Icons.Default.Notifications,
+                onClick = onNavigateToPriceAlert,
+                modifier = Modifier.weight(1f)
+            )
+            FeatureCard(
+                title = "Erfolge",
+                description = "Sehe deinen Fortschritt",
+                icon = Icons.Default.Star,
+                onClick = onNavigateToAchievements,
+                modifier = Modifier.weight(1f)
+            )
         }
+    }
+}
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Card(
+@Composable
+private fun FeatureCard(
+    title: String,
+    description: String,
+    icon: ImageVector,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier
+            .aspectRatio(1f),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        onClick = onClick,
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(8.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surface
-            ),
-            onClick = { onNavigateToPriceAlert() }
+                .fillMaxSize()
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
         ) {
-            Column(
-                modifier = Modifier
-                    .padding(16.dp)
-                    .fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    "Strompreis Alarm",
-                    fontSize = 20.sp,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    "Lassen Sie sich benachrichtigen, wenn der Strompreis unter einen bestimmten Wert fällt.",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(8.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surface
-            ),
-            onClick = { onNavigateToSettings() }
-        ) {
-            Column(
-                modifier = Modifier
-                    .padding(16.dp)
-                    .fillMaxWidth()
-            ) {
-                Text(
-                    "Ihre Übersicht",
-                    fontSize = 20.sp,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                Text("Guthaben: ${"%.2f".format(user.balance)} €")
-                Text("Verfügbare Kapazität: ${"%.2f".format(user.capacity)} kWh / ${user.maxCapacity} kWh")
-                Text("Gesamt gekauft: ${"%.2f".format(user.totalBought)} kWh")
-                Text("Gesamt verkauft: ${"%.2f".format(user.totalSold)} kWh")
-            }
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                modifier = Modifier.size(48.dp),
+                tint = MaterialTheme.colorScheme.primary
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = description,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 } 
