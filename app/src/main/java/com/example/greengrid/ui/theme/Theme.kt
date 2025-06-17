@@ -4,7 +4,9 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
+import androidx.compose.ui.platform.LocalContext
+import com.example.greengrid.data.AppPreferences
 
 private val LightColors = lightColorScheme(
     primary = md_theme_light_primary,
@@ -62,13 +64,34 @@ private val DarkColors = darkColorScheme(
     scrim = md_theme_dark_scrim
 )
 
+// Globaler Theme-State
+object ThemeState {
+    var overrideSystemTheme by mutableStateOf(false)
+    var darkTheme by mutableStateOf(false)
+}
+
 @Composable
 fun GreenGridTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit
 ) {
+    val context = LocalContext.current
+    
+    // Initialisiere Theme-State beim ersten Aufruf
+    LaunchedEffect(Unit) {
+        val appPreferences = AppPreferences(context)
+        ThemeState.overrideSystemTheme = appPreferences.overrideSystemTheme
+        ThemeState.darkTheme = appPreferences.darkTheme
+    }
+    
+    // Theme-Entscheidung basierend auf State
+    val shouldUseDarkTheme = if (ThemeState.overrideSystemTheme) {
+        ThemeState.darkTheme
+    } else {
+        isSystemInDarkTheme()
+    }
+    
     MaterialTheme(
-        colorScheme = if (darkTheme) DarkColors else LightColors,
+        colorScheme = if (shouldUseDarkTheme) DarkColors else LightColors,
         typography = Typography,
         content = content
     )

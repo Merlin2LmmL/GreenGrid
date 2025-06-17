@@ -3,7 +3,9 @@ package com.example.greengrid.ui
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.*
@@ -39,7 +41,6 @@ import java.util.*
  */
 @Composable
 fun ForecastScreen(
-    onNavigateToHome: () -> Unit,
     onNavigateToPriceAlert: () -> Unit
 ) {
     var priceHistory by remember { mutableStateOf<List<PricePoint>>(emptyList()) }
@@ -64,79 +65,165 @@ fun ForecastScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .padding(horizontal = 16.dp),
+            .padding(horizontal = 16.dp)
+            .verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Top App Bar
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 48.dp, bottom = 24.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // Aktuelle Preisdaten Card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface
+            ),
+            elevation = CardDefaults.cardElevation(2.dp)
         ) {
-            IconButton(onClick = onNavigateToHome) {
-                Icon(Icons.Default.ArrowBack, contentDescription = "Zurück")
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    "24h Strompreis-Prognose",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
+
+                // Graph-Bereich
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(200.dp)
+                        .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp))
+                        .padding(8.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    when {
+                        isLoading -> CircularProgressIndicator()
+                        error != null -> Text(error!!, color = MaterialTheme.colorScheme.error)
+                        priceHistory.size >= 2 -> {
+                            PriceGraph24h(
+                                priceHistory = priceHistory,
+                                colorScheme = MaterialTheme.colorScheme
+                            )
+                        }
+                        else -> Text("Keine Daten verfügbar")
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Aktueller Preis
+                val currentPrice = priceHistory.firstOrNull()?.price
+                if (currentPrice != null) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "Aktueller Preis:",
+                                style = MaterialTheme.typography.titleLarge,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                            Text(
+                                " ${"%.2f".format(currentPrice)} ct/kWh",
+                                style = MaterialTheme.typography.titleLarge,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+
+                // Erklärung für negative Preise
+                if (priceHistory.any { it.price < 0.0 }) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "⚠️ Negative Preise: Anbieter zahlen für Stromabnahme",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                        }
+                    }
+                }
             }
-            Text(
-                "Prognosen der nächsten 24h",
-                style = MaterialTheme.typography.headlineSmall,
-                color = MaterialTheme.colorScheme.primary
-            )
         }
 
+        Spacer(modifier = Modifier.height(20.dp))
+        HorizontalDivider(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+            thickness = 2.dp,
+            color = MaterialTheme.colorScheme.outline
+        )
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Graph-Bereich
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(200.dp)
-                .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(16.dp))
-                .padding(8.dp),
-            contentAlignment = Alignment.Center
+        // Erklärung Card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface
+            ),
+            elevation = CardDefaults.cardElevation(1.dp)
         ) {
-            when {
-                isLoading -> CircularProgressIndicator()
-                error != null -> Text(error!!, color = MaterialTheme.colorScheme.error)
-                priceHistory.size >= 2 -> {
-                    PriceGraph24h(
-                        priceHistory = priceHistory,
-                        colorScheme = MaterialTheme.colorScheme
-                    )
-                }
-                else -> Text("Keine Daten verfügbar")
-            }
-        }
-
-        // Erklärung, falls negative Preise vorhanden
-        if (priceHistory.any { it.price < 0.0 }) {
-            Spacer(modifier = Modifier.height(8.dp))
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp))
-                    .padding(12.dp)
+            Column(
+                modifier = Modifier.padding(16.dp)
             ) {
                 Text(
-                    text = "Die rote Linie im Graphen markiert den Nullpreis. Werte unterhalb dieser Linie sind negative Preise, d.h. Anbieter zahlen, um Strom abzunehmen.",
-                    style = MaterialTheme.typography.bodySmall,
+                    "Wie funktionieren Strompreis-Prognosen?",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
+                
+                Text(
+                    "Die Strompreis-Prognosen basieren auf verschiedenen Faktoren:",
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+                
+                Text(
+                    "• Erneuerbare Energien: Wind- und Solarstrom senken die Preise\n" +
+                    "• Nachfrage: Höherer Verbrauch treibt Preise nach oben\n" +
+                    "• Wetter: Sonnige/windige Tage = niedrigere Preise\n" +
+                    "• Tageszeit: Nachts sind Preise oft günstiger\n" +
+                    "• Wochenende: Geringere Nachfrage = niedrigere Preise",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                Text(
+                    "Negative Preise:",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+                
+                Text(
+                    "Bei sehr hoher Produktion erneuerbarer Energien können die Preise negativ werden. Das bedeutet, dass Stromanbieter dafür bezahlen, dass ihr Strom abgenommen wird.",
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Aktueller Preis: das erste Element in priceHistory (jetzt), passend zur rechten Position im Graphen
-        val currentPrice = priceHistory.firstOrNull()?.price
-        if (currentPrice != null) {
-            Text(
-                "Aktueller Preis: ${"%.2f".format(currentPrice)} ct/kWh",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onBackground
-            )
-        }
+        
+        Spacer(modifier = Modifier.height(24.dp))
     }
 }
 

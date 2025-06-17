@@ -164,7 +164,6 @@ class FirebaseRepository {
                 "price" to trade.price,
                 "timestamp" to trade.timestamp,
                 "userId" to userId,
-                "tax" to tax,
                 "finalAmount" to finalAmount
             )
             tradeRef.setValue(tradeData).await()
@@ -333,6 +332,18 @@ class FirebaseRepository {
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
+        }
+    }
+
+    suspend fun getCurrentUser(): User? {
+        return try {
+            val userId = auth.currentUser?.uid ?: return null
+            val snapshot = database.getReference("users/$userId").get().await()
+            val user = snapshot.getValue(User::class.java)
+            user?.copy(id = userId)
+        } catch (e: Exception) {
+            Log.e("FirebaseRepository", "Error getting current user", e)
+            null
         }
     }
 } 

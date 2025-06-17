@@ -14,7 +14,7 @@ android {
         minSdk = 30
         targetSdk = 35
         versionCode = 1
-        versionName = "1.0"
+        versionName = "1.0.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -69,6 +69,7 @@ dependencies {
 
     // Json
     implementation("org.json:json:20231013")
+    implementation("com.google.code.gson:gson:2.10.1")
 
     // WorkManager
     implementation("androidx.work:work-runtime-ktx:2.8.1")

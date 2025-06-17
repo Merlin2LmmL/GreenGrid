@@ -21,85 +21,35 @@ import com.example.greengrid.data.Achievement
 import com.example.greengrid.data.AchievementManager
 import com.example.greengrid.data.AchievementType
 import kotlinx.coroutines.flow.collectLatest
+import androidx.compose.ui.graphics.StrokeCap
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AchievementsScreen(
-    onNavigateBack: () -> Unit
-) {
+fun AchievementsScreen() {
     val context = LocalContext.current
     val achievementManager = remember { AchievementManager(context) }
     val achievements by achievementManager.achievements.collectAsState()
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Erfolge") },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Zurück")
-                    }
-                }
-            )
-        }
-    ) { paddingValues ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background)
-                .padding(paddingValues)
-                .padding(horizontal = 16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .padding(horizontal = 16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = "Achievements",
+            style = MaterialTheme.typography.headlineMedium,
+            color = MaterialTheme.colorScheme.onBackground,
+            modifier = Modifier.padding(bottom = 16.dp)
+        )
+
+        LazyColumn(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Text(
-                text = "Achievements",
-                style = MaterialTheme.typography.headlineMedium,
-                color = MaterialTheme.colorScheme.onBackground,
-                modifier = Modifier.padding(bottom = 16.dp)
-            )
-
-            LazyColumn(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(achievements) { achievement ->
-                    AchievementItem(achievement)
-                }
+            items(achievements) { achievement ->
+                AchievementItem(achievement)
             }
-
-            // Experimental Reset Section
-//            Spacer(modifier = Modifier.height(16.dp))
-//            Divider(color = MaterialTheme.colorScheme.outline)
-//            Spacer(modifier = Modifier.height(16.dp))
-//
-//            Text(
-//                text = "⚠️ Experimenteller Bereich ⚠️",
-//                style = MaterialTheme.typography.titleMedium,
-//                color = MaterialTheme.colorScheme.error,
-//                modifier = Modifier.padding(bottom = 8.dp)
-//            )
-//
-//            Text(
-//                text = "Diese Funktion setzt alle Achievements zurück",
-//                style = MaterialTheme.typography.bodyMedium,
-//                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
-//                textAlign = TextAlign.Center,
-//                modifier = Modifier.padding(bottom = 16.dp)
-//            )
-//
-//            Button(
-//                onClick = {
-//                    achievementManager.resetAchievements()
-//                },
-//                colors = ButtonDefaults.buttonColors(
-//                    containerColor = MaterialTheme.colorScheme.error
-//                ),
-//                modifier = Modifier
-//                    .fillMaxWidth()
-//                    .padding(horizontal = 32.dp)
-//            ) {
-//                Text("Achievements zurücksetzen")
-//            }
         }
     }
 }
@@ -176,29 +126,46 @@ fun AchievementCard(achievement: Achievement) {
                     MaterialTheme.colorScheme.onSurfaceVariant
             )
 
-            if (!achievement.isUnlocked) {
-                Spacer(modifier = Modifier.height(8.dp))
-                LinearProgressIndicator(
-                    progress = achievement.progress,
-                    modifier = Modifier.fillMaxWidth(),
-                    color = MaterialTheme.colorScheme.primary,
-                    trackColor = MaterialTheme.colorScheme.surfaceVariant
+            Spacer(modifier = Modifier.height(8.dp))
+            // Eigene ProgressBar: dünner und mit grauer Hintergrundleiste
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(4.dp)
+            ) {
+                // Hintergrund: immer 100% gefüllt, grau
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            color = MaterialTheme.colorScheme.surfaceTint,
+                            shape = RoundedCornerShape(2.dp)
+                        )
                 )
-                
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = when (achievement.type) {
-                        AchievementType.ECO_BEGINNER -> "${achievement.currentValue.toInt()}/${achievement.targetValue.toInt()} g CO₂"
-                        AchievementType.MARKET_MASTER -> "${achievement.currentValue.toInt()}/${achievement.targetValue.toInt()} Trades"
-                        AchievementType.GLAETTUNGSMEISTER -> "${achievement.currentValue.toInt()}/${achievement.targetValue.toInt()} Tage"
-                        AchievementType.PROFIT_100 -> "%.2f € / %d € Gewinn".format(achievement.currentValue, achievement.targetValue.toInt())
-                        AchievementType.TOP10_CO2 -> "Platz ${achievement.currentValue.toInt()}. Noch ${achievement.currentValue.toInt() - achievement.targetValue.toInt()} Plätze"
-                        else -> if (achievement.isUnlocked) "Abgeschlossen!" else "Noch nicht erreicht"
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                // Fortschritt: farbig, Breite nach progress
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .fillMaxWidth(fraction = achievement.progress.coerceIn(0f, 1f))
+                        .background(
+                            color = MaterialTheme.colorScheme.primary,
+                            shape = RoundedCornerShape(2.dp)
+                        )
                 )
             }
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = when (achievement.type) {
+                    AchievementType.ECO_BEGINNER -> "${achievement.currentValue.toInt()}/${achievement.targetValue.toInt()} g CO₂"
+                    AchievementType.MARKET_MASTER -> "${achievement.currentValue.toInt()}/${achievement.targetValue.toInt()} Trades"
+                    AchievementType.GLAETTUNGSMEISTER -> "${achievement.currentValue.toInt()}/${achievement.targetValue.toInt()} Tage"
+                    AchievementType.PROFIT_100 -> "%.2f € / %d € Gewinn".format(achievement.currentValue, achievement.targetValue.toInt())
+                    AchievementType.TOP10_CO2 -> "Platz ${achievement.currentValue.toInt()}. Noch ${achievement.currentValue.toInt() - achievement.targetValue.toInt()} Plätze"
+                    else -> if (achievement.isUnlocked) "Abgeschlossen!" else "Noch nicht erreicht"
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 } 

@@ -10,13 +10,9 @@ import com.example.greengrid.data.FirebaseRepository
 import com.example.greengrid.data.User
 import com.example.greengrid.data.PricePoint
 import com.example.greengrid.ui.AuthScreen
-import com.example.greengrid.ui.HomeScreen
-import com.example.greengrid.ui.StromboerseScreen
-import com.example.greengrid.ui.ForecastScreen
-import com.example.greengrid.ui.SettingsScreen
-import com.example.greengrid.ui.PriceAlertScreen
-import com.example.greengrid.ui.AchievementsScreen
+import com.example.greengrid.ui.MainNavigation
 import com.example.greengrid.data.LoginPreferences
+import com.example.greengrid.data.AppPreferences
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
@@ -34,7 +30,6 @@ class MainActivity : ComponentActivity() {
                 var currentScreen by remember { mutableStateOf("loading") }
                 var currentUser by remember { mutableStateOf<User?>(null) }
                 var currentName by remember { mutableStateOf("") }
-                var priceHistory by remember { mutableStateOf<List<PricePoint>>(emptyList()) }
 
                 // Login-Präferenzen prüfen
                 val loginPreferences = remember { LoginPreferences(this) }
@@ -46,7 +41,7 @@ class MainActivity : ComponentActivity() {
                                 onSuccess = { user ->
                                     currentUser = user
                                     currentName = user.username
-                                    currentScreen = "home"
+                                    currentScreen = "main"
                                 },
                                 onFailure = { e ->
                                     loginPreferences.clearLoginData()
@@ -75,46 +70,26 @@ class MainActivity : ComponentActivity() {
                         onAuthSuccess = { user ->
                             currentUser = user
                             currentName = user.username
-                            currentScreen = "home"
+                            currentScreen = "main"
                         },
                         repository = repository
                     )
-                    "home" -> HomeScreen(
-                        onNavigateToForecast = { currentScreen = "forecast" },
-                        onNavigateToSettings = { currentScreen = "settings" },
-                        onNavigateToStromboerse = { currentScreen = "stromboerse" },
-                        onNavigateToPriceAlert = { currentScreen = "pricealert" },
-                        onNavigateToAchievements = { currentScreen = "achievements" },
-                        currentName = currentName,
-                        user = currentUser!!
-                    )
-                    "forecast" -> ForecastScreen(
-                        onNavigateToHome = { currentScreen = "home" },
-                        onNavigateToPriceAlert = { currentScreen = "pricealert" }
-                    )
-                    "settings" -> SettingsScreen(
-                        onNavigateToHome = { currentScreen = "home" },
-                        onLogout = {
-                            loginPreferences.clearLoginData()
-                            currentUser = null
-                            currentScreen = "login"
-                        },
-                        currentName = currentName,
-                        onNameChange = { newName ->
-                            currentName = newName
-                            currentUser = currentUser?.copy(username = newName)
+                    "main" -> {
+                        currentUser?.let { user ->
+                            MainNavigation(
+                                user = user,
+                                onLogout = {
+                                    loginPreferences.clearLoginData()
+                                    currentUser = null
+                                    currentScreen = "login"
+                                },
+                                onNameChange = { newName ->
+                                    currentName = newName
+                                    currentUser = currentUser?.copy(username = newName)
+                                }
+                            )
                         }
-                    )
-                    "stromboerse" -> StromboerseScreen(
-                        onNavigateToHome = { currentScreen = "home" },
-                        user = currentUser!!
-                    )
-                    "pricealert" -> PriceAlertScreen(
-                        onNavigateToHome = { currentScreen = "home" }
-                    )
-                    "achievements" -> AchievementsScreen(
-                        onNavigateBack = { currentScreen = "home" }
-                    )
+                    }
                 }
             }
         }

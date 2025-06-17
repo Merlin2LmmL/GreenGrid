@@ -7,10 +7,16 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
@@ -18,8 +24,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import androidx.core.content.ContextCompat
 import androidx.work.*
 import com.example.greengrid.data.PricePoint
@@ -27,6 +36,7 @@ import com.example.greengrid.data.fetchCurrentPrice
 import com.example.greengrid.data.findDailyPriceMinimum
 import com.example.greengrid.data.PriceMinimum
 import com.example.greengrid.data.PriceAlertPreferences
+import com.example.greengrid.data.PriceAlert
 import com.example.greengrid.notification.PriceAlertNotificationManager
 import com.example.greengrid.notification.PriceAlertWorker
 import kotlinx.coroutines.delay
@@ -35,13 +45,16 @@ import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.TimeUnit
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PriceAlertScreen(
-    onNavigateToHome: () -> Unit
-) {
+fun PriceAlertScreen() {
     val context = LocalContext.current
     val preferences = remember { PriceAlertPreferences(context) }
+    val workManager = remember { WorkManager.getInstance(context) }
     
+    var showAddAlertDialog by remember { mutableStateOf(false) }
+    var alerts by remember { mutableStateOf(preferences.getAlerts()) }
+
     var targetPrice by remember { mutableStateOf(preferences.targetPrice) }
     var isAlertActive by remember { mutableStateOf(preferences.isAlertActive) }
     var isMinPriceAlertActive by remember { mutableStateOf(preferences.isMinPriceAlertActive) }
@@ -53,9 +66,6 @@ fun PriceAlertScreen(
     
     val notificationManager = remember { PriceAlertNotificationManager(context) }
     val scope = rememberCoroutineScope()
-
-    // WorkManager für Hintergrund-Benachrichtigungen
-    val workManager = remember { WorkManager.getInstance(context) }
 
     // Berechtigungsanfrage für Benachrichtigungen
     val hasNotificationPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -204,180 +214,378 @@ fun PriceAlertScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .padding(horizontal = 16.dp),
+            .padding(horizontal = 16.dp)
+            .verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Top App Bar
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 48.dp, bottom = 24.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(onClick = onNavigateToHome) {
-                Icon(Icons.Default.ArrowBack, contentDescription = "Zurück")
-            }
-            Text(
-                "Strompreis Alarm",
-                style = MaterialTheme.typography.headlineSmall,
-                color = MaterialTheme.colorScheme.primary
-            )
-            IconButton(onClick = { loadPriceData() }) {
-                Icon(Icons.Default.Refresh, contentDescription = "Aktualisieren")
-            }
-        }
+        Spacer(modifier = Modifier.height(12.dp))
 
-        Spacer(modifier = Modifier.height(24.dp))
-
-        // Aktueller Preis und Tiefpunkt
-        when {
-            isLoading -> CircularProgressIndicator()
-            error != null -> Text(
-                error!!,
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodyMedium
-            )
-            currentPrice != null -> Column(
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    "Aktueller Preis: ${"%.2f".format(currentPrice)} ct/kWh",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onBackground
-                )
-                priceMinimum?.let { min ->
-                    Text(
-                        "Tiefpunkt heute: ${"%.2f".format(min.price)} ct/kWh um ${min.hour}:00 Uhr",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                lastUpdateTime?.let { time ->
-                    Text(
-                        "Letzte Aktualisierung: ${SimpleDateFormat("HH:mm", Locale.getDefault()).format(time)} Uhr",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(32.dp))
-
-        // Tiefpunkt-Alarm
+        // Preisalarm-Bereich
         Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp)
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface
+            ),
+            elevation = CardDefaults.cardElevation(2.dp)
         ) {
-            Column(
-                modifier = Modifier
-                    .padding(16.dp)
-                    .fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
+            Column(modifier = Modifier.padding(16.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        "Täglich an Tiefpunkt erinnern",
-                        style = MaterialTheme.typography.titleMedium
+                        "Preisalarme",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.primary
                     )
+                    Button(
+                        onClick = { showAddAlertDialog = true },
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary
+                        )
+                    ) {
+                        Text("+ Alarm")
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                if (alerts.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(100.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            "Keine Preisalarme vorhanden",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        alerts.forEach { alert ->
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.secondaryContainer
+                                )
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(12.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column {
+                                        Text(
+                                            "${if (alert.isAbove) "Über" else "Unter"} ${alert.threshold} ct/kWh",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                        Text(
+                                            "Benachrichtigung: ${if (alert.notify) "Aktiv" else "Inaktiv"}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    IconButton(
+                                        onClick = {
+                                            alerts = alerts.filter { it != alert }
+                                            preferences.removeAlert(alert)
+                                        }
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Delete,
+                                            contentDescription = "Löschen",
+                                            tint = MaterialTheme.colorScheme.error
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        // Tiefpunkt-Alarm-Bereich
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.primaryContainer
+            ),
+            elevation = CardDefaults.cardElevation(2.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "Automatischer Tiefpunkt-Alarm",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            "Benachrichtigung 15 Minuten vor dem Tagestiefpreis",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.padding(top = 2.dp)
+                        )
+                    }
                     Switch(
                         checked = isMinPriceAlertActive,
-                        onCheckedChange = { isMinPriceAlertActive = it }
+                        onCheckedChange = { 
+                            isMinPriceAlertActive = it
+                            if (it && !hasNotificationPermission && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                            }
+                        },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                            checkedTrackColor = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.5f),
+                            uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            uncheckedTrackColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                        )
                     )
                 }
                 if (isMinPriceAlertActive) {
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        "Sie werden 15 Minuten vor dem Tiefpunkt benachrichtigt.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Default.Notifications,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            "Hintergrundprozess aktiv",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+                if (priceMinimum != null) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Default.DateRange,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            "Tiefpunkt heute: ${priceMinimum!!.hour}:00 Uhr (${"%.2f".format(priceMinimum!!.price)} ct/kWh)",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(20.dp))
 
-        // Manueller Preis-Alarm
+        HorizontalDivider(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+            thickness = 2.dp,
+            color = MaterialTheme.colorScheme.outline
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Settings/Erklärungen Bereich (scrollbar)
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface
+            ),
+            elevation = CardDefaults.cardElevation(1.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.Notifications,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        "Preisalarm-Erklärung & Tipps",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                Text(
+                    "So funktionieren Preisalarme:",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+                Text(
+                    "• Setzen Sie einen Schwellenwert in ct/kWh\n" +
+                    "• Wählen Sie, ob Sie bei Preisen über oder unter diesem Wert benachrichtigt werden möchten\n" +
+                    "• Die App überwacht kontinuierlich die aktuellen Strompreise\n" +
+                    "• Bei Erreichen des Schwellenwerts erhalten Sie eine Push-Benachrichtigung\n" +
+                    "• Der automatische Tiefpunkt-Alarm benachrichtigt Sie 15 Minuten vor dem günstigsten Zeitpunkt des Tages",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    "Tipps für effektive Preisalarme:",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+                Text(
+                    "• Setzen Sie mehrere Alarme für verschiedene Szenarien\n" +
+                    "• Beobachten Sie die Preisverläufe, um realistische Schwellenwerte zu finden\n" +
+                    "• Nutzen Sie niedrige Preise zum Kaufen und hohe Preise zum Verkaufen\n" +
+                    "• Aktivieren Sie den automatischen Tiefpunkt-Alarm für tägliche Benachrichtigungen",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(24.dp))
+    }
+
+    // Add Alert Dialog
+    if (showAddAlertDialog) {
+        AddPriceAlertDialog(
+            onDismiss = { showAddAlertDialog = false },
+            onAddAlert = { alert ->
+                alerts = alerts + alert
+                preferences.addAlert(alert)
+                showAddAlertDialog = false
+            }
+        )
+    }
+}
+
+@Composable
+fun AddPriceAlertDialog(
+    onDismiss: () -> Unit,
+    onAddAlert: (PriceAlert) -> Unit
+) {
+    var threshold by remember { mutableStateOf("") }
+    var isAbove by remember { mutableStateOf(true) }
+    var notify by remember { mutableStateOf(true) }
+
+    Dialog(onDismissRequest = onDismiss) {
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp)
+                .padding(16.dp),
+            shape = RoundedCornerShape(16.dp)
         ) {
             Column(
-                modifier = Modifier
-                    .padding(16.dp)
-                    .fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
+                modifier = Modifier.padding(16.dp)
             ) {
                 Text(
-                    "Manueller Preis-Alarm",
-                    style = MaterialTheme.typography.titleMedium
+                    "Neuen Preisalarm hinzufügen",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(bottom = 16.dp)
                 )
-                Spacer(modifier = Modifier.height(16.dp))
-                if (isAlertActive) {
-                    Text(
-                        "Aktiver Alarm bei ${"%.2f".format(targetPrice)} ct/kWh",
-                        style = MaterialTheme.typography.bodyMedium
+
+                OutlinedTextField(
+                    value = threshold,
+                    onValueChange = { threshold = it },
+                    label = { Text("Schwellenwert (ct/kWh)") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor = MaterialTheme.colorScheme.secondary
                     )
-                    Spacer(modifier = Modifier.height(16.dp))
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
                     Button(
-                        onClick = { isAlertActive = false },
+                        onClick = { isAbove = true },
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.error
-                        )
-                    ) {
-                        Icon(
-                            Icons.Default.Notifications,
-                            contentDescription = null
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Alarm deaktivieren")
-                    }
-                } else {
-                    OutlinedTextField(
-                        value = targetPrice.toString(),
-                        onValueChange = { 
-                            targetPrice = it.toDoubleOrNull() ?: 0.0 
-                        },
-                        label = { Text("Preis in ct/kWh") },
-                        keyboardOptions = KeyboardOptions(
-                            keyboardType = KeyboardType.Decimal
+                            containerColor = if (isAbove) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
+                            contentColor = if (isAbove) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary
                         ),
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Button(
-                        onClick = { isAlertActive = true },
-                        enabled = targetPrice > 0,
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.weight(1f).padding(end = 4.dp)
                     ) {
-                        Icon(
-                            Icons.Default.DateRange,
-                            contentDescription = null
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Alarm aktivieren")
+                        Text("Über")
+                    }
+                    Button(
+                        onClick = { isAbove = false },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (!isAbove) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
+                            contentColor = if (!isAbove) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary
+                        ),
+                        modifier = Modifier.weight(1f).padding(start = 4.dp)
+                    ) {
+                        Text("Unter")
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "Benachrichtigung senden",
+                        modifier = Modifier.weight(1f)
+                    )
+                    Switch(
+                        checked = notify,
+                        onCheckedChange = { notify = it }
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text("Abbrechen")
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Button(
+                        onClick = {
+                            val thresholdValue = threshold.toDoubleOrNull()
+                            if (thresholdValue != null && thresholdValue >= -20.0) {
+                                onAddAlert(PriceAlert(
+                                    threshold = thresholdValue,
+                                    isAbove = isAbove,
+                                    notify = notify
+                                ))
+                            }
+                        },
+                        enabled = threshold.toDoubleOrNull() != null && threshold.toDoubleOrNull()!! >= -20.0
+                    ) {
+                        Text("Hinzufügen")
                     }
                 }
             }
         }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        // Erklärung
-        Text(
-            "Sie werden benachrichtigt, wenn der Strompreis unter Ihren festgelegten Wert fällt oder wenn der tägliche Tiefpunkt erreicht wird. Die Preise werden alle 5 Minuten aktualisiert.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 16.dp)
-        )
     }
 } 
