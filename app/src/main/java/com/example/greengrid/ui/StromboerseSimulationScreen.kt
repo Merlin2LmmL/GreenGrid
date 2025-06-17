@@ -140,9 +140,11 @@ fun StromboerseScreen(
         lastVisible ?: basePriceHistory.last().price
     }
 
-    // Berechne den Gesamtwert mit Steuern (Brutto)
+    // Berechne den Gesamtwert mit 10% Steuer für die Anzeige
     val totalValue = remember(currentUser, currentPrice) {
-        currentUser.capacity * 0.01
+        val storedEnergyValue = currentUser.capacity * currentPrice / 100.0 * (1 - 0.1) // 10% Steuer nur auf gespeicherte Energie
+        val baseValue = storedEnergyValue + currentUser.balance // Balance ohne Steuer
+        baseValue * 1.1 // 10% Steuer
     }
 
     Column(
@@ -304,8 +306,8 @@ fun StromboerseScreen(
                 .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(16.dp))
                 .padding(16.dp)
         ) {
-            val priceForValue = lastTradePrice ?: currentPrice
-            val totalValue = frozenTotalValue ?: (currentUser.balance + currentUser.capacity * priceForValue / 100.0)
+            val storedEnergyValue = currentUser.capacity * currentPrice / 100.0 * (1 - 0.05) // 10% Steuer nur auf gespeicherte Energie
+            val totalValue = storedEnergyValue + currentUser.balance // Balance ohne Steuer
             Text(
                 text = "Gesamtwert: %.2f €".format(totalValue),
                 style = MaterialTheme.typography.bodyLarge,
@@ -573,7 +575,9 @@ fun StromboerseScreen(
                             .filter { it.id.isNotEmpty() && it.username.isNotEmpty() } // Nur echte Spieler
                             .sortedByDescending { user ->
                                 if (selectedLeaderboard == "profit") {
-                                    user.capacity * 0.01
+                                    val storedEnergyValue = user.capacity * currentPrice / 100.0 * (1 - 0.1) // 10% Steuer nur auf gespeicherte Energie
+                                    val baseValue = storedEnergyValue + user.balance
+                                    baseValue
                                 } else {
                                     user.co2Saved
                                 }

@@ -1,88 +1,75 @@
 package com.example.greengrid.data
 
-import com.google.firebase.database.DataSnapshot
-import com.google.firebase.database.DatabaseError
-import com.google.firebase.database.FirebaseDatabase
-import com.google.firebase.database.ValueEventListener
-import kotlinx.coroutines.channels.awaitClose
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.callbackFlow
-import kotlinx.coroutines.tasks.await
+import android.content.Context
+import android.content.SharedPreferences
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
-class AchievementManager(private val database: FirebaseDatabase) {
-    private val achievementsRef = database.getReference("achievements")
+class AchievementManager(context: Context) {
+    private val prefs: SharedPreferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    private val _achievements = MutableStateFlow<List<Achievement>>(emptyList())
+    val achievements: StateFlow<List<Achievement>> = _achievements.asStateFlow()
 
-    fun getUserAchievements(userId: String): Flow<List<Achievement>> = callbackFlow {
-        val listener = achievementsRef.child(userId).addValueEventListener(object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                val achievements = mutableListOf<Achievement>()
-                
-                // Default achievements
-                achievements.addAll(listOf(
-                    Achievement(
-                        type = AchievementType.FIRST_TRADE,
-                        title = "Erster Handel",
-                        description = "Führe deinen ersten Kauf oder Verkauf durch",
-                        targetValue = 1.0,
-                        currentValue = snapshot.child("firstTrade").getValue(Double::class.java) ?: 0.0,
-                        isUnlocked = snapshot.child("firstTrade").getValue(Double::class.java) ?: 0.0 >= 1.0
-                    ),
-                    Achievement(
-                        type = AchievementType.ECO_BEGINNER,
-                        title = "Öko-Anfänger",
-                        description = "Spare 100 g CO₂ ein",
-                        targetValue = 100.0,
-                        currentValue = snapshot.child("co2Saved").getValue(Double::class.java) ?: 0.0,
-                        isUnlocked = snapshot.child("co2Saved").getValue(Double::class.java) ?: 0.0 >= 100.0
-                    ),
-                    Achievement(
-                        type = AchievementType.MARKET_MASTER,
-                        title = "Marktmeister",
-                        description = "Führe 200 Trades durch",
-                        targetValue = 200.0,
-                        currentValue = snapshot.child("totalTrades").getValue(Double::class.java) ?: 0.0,
-                        isUnlocked = snapshot.child("totalTrades").getValue(Double::class.java) ?: 0.0 >= 200.0
-                    ),
-                    Achievement(
-                        type = AchievementType.GLAETTUNGSMEISTER,
-                        title = "Glättungsmeister",
-                        description = "Kaufe 7 Tage lang unter dem Tagesdurchschnitt",
-                        targetValue = 7.0,
-                        currentValue = snapshot.child("smoothingDays").getValue(Double::class.java) ?: 0.0,
-                        isUnlocked = snapshot.child("smoothingDays").getValue(Double::class.java) ?: 0.0 >= 7.0
-                    ),
-                    Achievement(
-                        type = AchievementType.PROFIT_100,
-                        title = "Profit 100",
-                        description = "Erreiche 100€ virtuellen Profit",
-                        targetValue = 100.0,
-                        currentValue = snapshot.child("profit").getValue(Double::class.java) ?: 0.0,
-                        isUnlocked = snapshot.child("profit").getValue(Double::class.java) ?: 0.0 >= 100.0
-                    ),
-                    Achievement(
-                        type = AchievementType.TOP10_CO2,
-                        title = "Top 10 CO₂",
-                        description = "Erreiche die Top 10% der CO₂-Rangliste",
-                        targetValue = 1.0,
-                        currentValue = snapshot.child("top10Co2").getValue(Double::class.java) ?: 0.0,
-                        isUnlocked = snapshot.child("top10Co2").getValue(Double::class.java) ?: 0.0 >= 1.0
-                    )
-                ))
-                
-                trySend(achievements)
-            }
-
-            override fun onCancelled(error: DatabaseError) {
-                // Handle error
-            }
-        })
-
-        awaitClose {
-            achievementsRef.child(userId).removeEventListener(listener)
-        }
+    init {
+        loadAchievements()
     }
 
-    suspend fun updateAchievement(userId: String, type: AchievementType, value: Double) {
+    private fun loadAchievements() {
+        val achievements = listOf(
+            Achievement(
+                type = AchievementType.FIRST_TRADE,
+                title = "Erster Handel",
+                description = "Führe deinen ersten Kauf oder Verkauf durch",
+                targetValue = 1.0,
+                currentValue = prefs.getFloat("firstTrade", 0f).toDouble(),
+                isUnlocked = prefs.getFloat("firstTrade", 0f) >= 1f
+            ),
+            Achievement(
+                type = AchievementType.ECO_BEGINNER,
+                title = "Öko-Anfänger",
+                description = "Spare 100 g CO₂ ein",
+                targetValue = 100.0,
+                currentValue = prefs.getFloat("co2Saved", 0f).toDouble(),
+                isUnlocked = prefs.getFloat("co2Saved", 0f) >= 100f
+            ),
+            Achievement(
+                type = AchievementType.MARKET_MASTER,
+                title = "Marktmeister",
+                description = "Führe 200 Trades durch",
+                targetValue = 200.0,
+                currentValue = prefs.getFloat("totalTrades", 0f).toDouble(),
+                isUnlocked = prefs.getFloat("totalTrades", 0f) >= 200f
+            ),
+            Achievement(
+                type = AchievementType.GLAETTUNGSMEISTER,
+                title = "Glättungsmeister",
+                description = "Speichere Strom über 7 Tage",
+                targetValue = 7.0,
+                currentValue = prefs.getFloat("smoothingDays", 0f).toDouble(),
+                isUnlocked = prefs.getFloat("smoothingDays", 0f) >= 7f
+            ),
+            Achievement(
+                type = AchievementType.PROFIT_100,
+                title = "Profitjäger",
+                description = "Mache 100€ Profit",
+                targetValue = 100.0,
+                currentValue = prefs.getFloat("profit", 0f).toDouble(),
+                isUnlocked = prefs.getFloat("profit", 0f) >= 100f
+            ),
+            Achievement(
+                type = AchievementType.TOP10_CO2,
+                title = "CO₂-Champion",
+                description = "Sei unter den Top 10 CO₂-Einsparern",
+                targetValue = 10.0,
+                currentValue = prefs.getFloat("top10Co2", 0f).toDouble(),
+                isUnlocked = prefs.getFloat("top10Co2", 0f) <= 10f
+            )
+        )
+        _achievements.value = achievements
+    }
+
+    fun updateAchievement(type: AchievementType, value: Double) {
         val achievementKey = when (type) {
             AchievementType.FIRST_TRADE -> "firstTrade"
             AchievementType.ECO_BEGINNER -> "co2Saved"
@@ -93,7 +80,7 @@ class AchievementManager(private val database: FirebaseDatabase) {
         }
         
         // Ensure we don't decrease values for certain achievements
-        val currentValue = achievementsRef.child(userId).child(achievementKey).get().await().getValue(Double::class.java) ?: 0.0
+        val currentValue = prefs.getFloat(achievementKey, 0f).toDouble()
         val newValue = when (type) {
             AchievementType.FIRST_TRADE -> maxOf(currentValue, value)
             AchievementType.ECO_BEGINNER -> maxOf(currentValue, value)
@@ -103,19 +90,16 @@ class AchievementManager(private val database: FirebaseDatabase) {
             AchievementType.TOP10_CO2 -> maxOf(currentValue, value)
         }
         
-        achievementsRef.child(userId).child(achievementKey).setValue(newValue).await()
+        prefs.edit().putFloat(achievementKey, newValue.toFloat()).apply()
+        loadAchievements() // Reload achievements after update
     }
 
-    suspend fun resetAchievements(userId: String) {
-        val defaultValues = mapOf(
-            "firstTrade" to 0.0,
-            "co2Saved" to 0.0,
-            "totalTrades" to 0.0,
-            "smoothingDays" to 0.0,
-            "profit" to 0.0,
-            "top10Co2" to 0.0
-        )
-        
-        achievementsRef.child(userId).setValue(defaultValues).await()
+    fun resetAchievements() {
+        prefs.edit().clear().apply()
+        loadAchievements()
+    }
+
+    companion object {
+        private const val PREFS_NAME = "achievements_preferences"
     }
 } 

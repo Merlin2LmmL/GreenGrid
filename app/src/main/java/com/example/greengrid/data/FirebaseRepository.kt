@@ -14,15 +14,11 @@ import kotlinx.coroutines.tasks.await
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import kotlin.math.exp
-import com.google.firebase.firestore.DocumentSnapshot
-import kotlin.math.abs
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 
 class FirebaseRepository {
     private val auth = Firebase.auth
     private val database = Firebase.database("https://greengrid-c6bc8-default-rtdb.europe-west1.firebasedatabase.app/")
-    private val achievementManager = AchievementManager(database)
+    private val achievementManager = AchievementManager(database.app.applicationContext)
 
     suspend fun signIn(email: String, password: String): Result<User> {
         return try {
@@ -43,7 +39,6 @@ class FirebaseRepository {
 
     fun observeUserData(): Flow<User> = callbackFlow {
         val userId = auth.currentUser?.uid ?: throw Exception("User not logged in")
-        Log.d("FirebaseRepository", "Observing user data for ID: $userId")
         
         val listener = database.getReference("users/$userId")
             .addValueEventListener(object : ValueEventListener {
@@ -52,10 +47,7 @@ class FirebaseRepository {
                     if (user != null) {
                         // Ensure the user ID is set correctly
                         val updatedUser = user.copy(id = userId)
-                        Log.d("FirebaseRepository", "User data updated: $updatedUser")
                         trySend(updatedUser)
-                    } else {
-                        Log.e("FirebaseRepository", "No user data found for ID: $userId")
                     }
                 }
 
@@ -82,16 +74,21 @@ class FirebaseRepository {
                 return Result.failure(Exception("Nicht genug Strom im Speicher!"))
             }
 
-            // Berechne die Steuer (10%)
+            // Berechne die Steuer (5%)
             val tax = trade.amount * 0.05
             val finalAmount = trade.amount - tax // Abzüge der Steuer vom Handelsbetrag
 
             // Berechne die neue Balance
-            val newBalance = if (trade.isBuy) {
-                user.balance - finalAmount
+            var newBalance = if (trade.isBuy) {
+                // Beim Kauf: Abzug des Preises pro kWh (inkl. Steuer)
+                user.balance - (trade.amount * trade.price / 100.0)
             } else {
-                user.balance + finalAmount
+                // Beim Verkauf: Addition des Preises pro kWh (abzüglich Steuer)
+                user.balance + (finalAmount * trade.price / 100.0)
             }
+
+            // 0.2 ct Netzsteuer für jeden Kauf (Um die Datenbank zu entlasten)
+            newBalance -= 0.1
 
             // Berechne die neue Kapazität
             val newCapacity = if (trade.isBuy) {
@@ -114,7 +111,6 @@ class FirebaseRepository {
 
                 trade.amount * baseCo2Saving * timeMultiplier
             }
-            Log.d("FirebaseRepository", "Calculated CO2 savings: $co2Saved")
 
             // Update user data
             val updatedUser = user.copy(
@@ -129,6 +125,36 @@ class FirebaseRepository {
 
             // Update user data in database
             userRef.setValue(updatedUser).await()
+
+            // Update achievements
+            achievementManager.updateAchievement(AchievementType.FIRST_TRADE, 1.0)
+            achievementManager.updateAchievement(AchievementType.ECO_BEGINNER, updatedUser.co2Saved)
+            achievementManager.updateAchievement(AchievementType.MARKET_MASTER, updatedUser.totalBought + updatedUser.totalSold)
+            achievementManager.updateAchievement(AchievementType.PROFIT_100, newBalance - 500)
+
+            // Update Glättungsmeister achievement
+            if (trade.isBuy) {
+                // Beim Kauf: Speichere den Zeitpunkt
+                userRef.child("lastStorageUpdate").setValue(System.currentTimeMillis()).await()
+            } else {
+                // Beim Verkauf: Berechne die Speicherzeit
+                val storageTimeHours = (System.currentTimeMillis() - user.lastStorageUpdate) / (1000.0 * 60 * 60)
+                val storageDays = storageTimeHours / 24.0
+                achievementManager.updateAchievement(AchievementType.GLAETTUNGSMEISTER, storageDays)
+            }
+
+            // Update CO2 Champion achievement
+            val allUsers = readAllUsersDirectly()
+            val userRank = allUsers
+                .filter { it.co2Saved > 0 }
+                .sortedByDescending { it.co2Saved }
+                .indexOfFirst { it.id == userId }
+                .let { if (it == -1) allUsers.size else it + 1 }
+
+            achievementManager.updateAchievement(
+                AchievementType.TOP10_CO2,
+                userRank.toDouble()
+            )
 
             // Store the trade in the database with correct format
             val tradeRef = database.getReference("market/trades").push()
@@ -170,8 +196,6 @@ class FirebaseRepository {
                         }
                     }.sortedBy { it.timestamp }
                     
-                    Log.d("FirebaseRepository", "Processing ${trades.size} trades")
-                    
                     // Generate base price history
                     val basePrices = simulatePriceHistory(
                         rangeHours = PriceSimulationConfigs.defaultParams.rangeHours,
@@ -185,14 +209,12 @@ class FirebaseRepository {
                         seedShort = PriceSimulationConfigs.defaultParams.seedShort,
                         intervalHours = PriceSimulationConfigs.defaultParams.intervalHours
                     )
-
-                    Log.d("FirebaseRepository", "Generated ${basePrices.size} base price points")
                     
                     // Calculate price impact from trades
                     val priceByHour = basePrices.associate { it.timestamp to it.price }.toMutableMap()
                     val volumeByHour = basePrices.associate { it.timestamp to it.volume }.toMutableMap()
                     
-                    val decayHours = 6
+                    val decayHours = 8
                     val decayK = 0.7
                     
                     for (trade in trades) {
@@ -202,12 +224,10 @@ class FirebaseRepository {
                         
                         // Calculate trade impact - FIXED: Now sells decrease price and buys increase it
                         val baseImpact = if (trade.isBuy) {
-                            trade.amount * 0.02  // Kauf erhöht den Preis stärker
+                            trade.amount * 0.05  // Kauf erhöht den Preis stärker
                         } else {
-                            -trade.amount * 0.02  // Verkauf senkt den Preis stärker
+                            -trade.amount * 0.05  // Verkauf senkt den Preis stärker
                         }
-                        
-                        Log.d("FirebaseRepository", "Trade: isBuy=${trade.isBuy}, amount=${trade.amount}, baseImpact=$baseImpact")
                         
                         // Apply impact to current hour and future hours
                         for (n in 0 until decayHours) {
@@ -223,8 +243,6 @@ class FirebaseRepository {
                             
                             // Aktualisiere das Volumen
                             volumeByHour[targetHour] = (volumeByHour[targetHour] ?: 0.0) + trade.amount
-                            
-                            Log.d("FirebaseRepository", "Hour $n: currentPrice=$currentPrice, impact=$impact, newPrice=${priceByHour[targetHour]}")
                         }
                     }
                     
@@ -236,8 +254,7 @@ class FirebaseRepository {
                             volume = volumeByHour[timestamp] ?: 0.0
                         )
                     }.sortedBy { it.timestamp }
-                    
-                    Log.d("FirebaseRepository", "Final prices: first=${pricePoints.firstOrNull()?.price}, last=${pricePoints.lastOrNull()?.price}")
+
                     trySend(pricePoints)
                 }
 
@@ -269,14 +286,13 @@ class FirebaseRepository {
                     Log.e("FirebaseRepository", "Error cleaning up trade data", e)
                 }
             }
-            Log.d("FirebaseRepository", "Successfully cleaned up old trade data. Deleted $deletedCount old trades")
+            if (deletedCount > 0)Log.d("FirebaseRepository", "Successfully cleaned up old trade data. Deleted $deletedCount old trades")
         } catch (e: Exception) {
             Log.e("FirebaseRepository", "Error during data cleanup", e)
         }
     }
 
     suspend fun readAllUsersDirectly(): List<User> {
-        Log.d("FirebaseRepository", "Starting direct user read")
         val usersRef = database.getReference("users")
         
         try {
@@ -304,8 +320,6 @@ class FirebaseRepository {
                     Log.e("FirebaseRepository", "Error processing user data for ID: ${userSnapshot.key}", e)
                 }
             }
-            
-            Log.d("FirebaseRepository", "Successfully loaded ${users.size} users")
             return users
         } catch (e: Exception) {
             Log.e("FirebaseRepository", "Error reading users from database", e)

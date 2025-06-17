@@ -11,19 +11,19 @@ import com.example.greengrid.data.PricePoint
 fun simulatePriceHistory(
     rangeHours: Long,
     intervalHours: Long,
-    basePrice: Double = 25.0,
-    seasonalAmp: Double = 5.0,
-    dailyAmp: Double = 3.0,
-    weekendOffset: Double = 2.0,
-    noiseAmpLong: Double = 1.5,
-    noiseAmpShort: Double = 0.7,
-    seedLong: Long = 12345L,
-    seedShort: Long = 54321L
+    basePrice: Double,
+    seasonalAmp: Double,
+    dailyAmp: Double,
+    weekendOffset: Double,
+    noiseAmpLong: Double,
+    noiseAmpShort: Double,
+    seedLong: Long,
+    seedShort: Long
 ): List<PricePoint> {
     require(intervalHours > 0) { "intervalHours muss größer als 0 sein" }
     val now = Instant.ofEpochMilli(System.currentTimeMillis()).truncatedTo(ChronoUnit.HOURS)
     val pointsCount = (rangeHours / intervalHours).toInt() + 1
-    val startHour = now.minus((pointsCount - 1L) * intervalHours, ChronoUnit.HOURS)
+    val startHour = now.minus((pointsCount - 1L) * intervalHours, ChronoUnit.HOURS).plus(6, ChronoUnit.HOURS)
     val zone = ZoneId.systemDefault()
 
     val randLong = Random(seedLong)

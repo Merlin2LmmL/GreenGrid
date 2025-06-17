@@ -8,40 +8,28 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.example.greengrid.data.Achievement
 import com.example.greengrid.data.AchievementManager
 import com.example.greengrid.data.AchievementType
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.database.ktx.database
-import com.google.firebase.ktx.Firebase
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AchievementsScreen(
     onNavigateBack: () -> Unit
 ) {
-    val database = Firebase.database("https://greengrid-c6bc8-default-rtdb.europe-west1.firebasedatabase.app/")
-    val achievementManager = remember { AchievementManager(database) }
-    val userId = FirebaseAuth.getInstance().currentUser?.uid ?: return
-    var achievements by remember { mutableStateOf<List<Achievement>>(emptyList()) }
-    val scope = rememberCoroutineScope()
-
-    LaunchedEffect(Unit) {
-        achievementManager.getUserAchievements(userId).collectLatest { updatedAchievements ->
-            achievements = updatedAchievements
-        }
-    }
+    val context = LocalContext.current
+    val achievementManager = remember { AchievementManager(context) }
+    val achievements by achievementManager.achievements.collectAsState()
 
     Scaffold(
         topBar = {
@@ -55,26 +43,70 @@ fun AchievementsScreen(
             )
         }
     ) { paddingValues ->
-        LazyColumn(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
                 .padding(paddingValues)
                 .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            item {
-                Text(
-                    "Deine Erfolge",
-                    style = MaterialTheme.typography.headlineSmall,
-                    modifier = Modifier.padding(vertical = 16.dp)
-                )
+            Text(
+                text = "Achievements",
+                style = MaterialTheme.typography.headlineMedium,
+                color = MaterialTheme.colorScheme.onBackground,
+                modifier = Modifier.padding(bottom = 16.dp)
+            )
+
+            LazyColumn(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(achievements) { achievement ->
+                    AchievementItem(achievement)
+                }
             }
 
-            items(achievements) { achievement ->
-                AchievementCard(achievement = achievement)
-            }
+            // Experimental Reset Section
+//            Spacer(modifier = Modifier.height(16.dp))
+//            Divider(color = MaterialTheme.colorScheme.outline)
+//            Spacer(modifier = Modifier.height(16.dp))
+//
+//            Text(
+//                text = "⚠️ Experimenteller Bereich ⚠️",
+//                style = MaterialTheme.typography.titleMedium,
+//                color = MaterialTheme.colorScheme.error,
+//                modifier = Modifier.padding(bottom = 8.dp)
+//            )
+//
+//            Text(
+//                text = "Diese Funktion setzt alle Achievements zurück",
+//                style = MaterialTheme.typography.bodyMedium,
+//                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
+//                textAlign = TextAlign.Center,
+//                modifier = Modifier.padding(bottom = 16.dp)
+//            )
+//
+//            Button(
+//                onClick = {
+//                    achievementManager.resetAchievements()
+//                },
+//                colors = ButtonDefaults.buttonColors(
+//                    containerColor = MaterialTheme.colorScheme.error
+//                ),
+//                modifier = Modifier
+//                    .fillMaxWidth()
+//                    .padding(horizontal = 32.dp)
+//            ) {
+//                Text("Achievements zurücksetzen")
+//            }
         }
     }
+}
+
+@Composable
+fun AchievementItem(achievement: Achievement) {
+    AchievementCard(achievement = achievement)
 }
 
 @Composable
@@ -105,9 +137,9 @@ fun AchievementCard(achievement: Achievement) {
                 ) {
                     Icon(
                         imageVector = if (achievement.isUnlocked)
-                            Icons.Default.Star
+                            Icons.Default.Check
                         else
-                            Icons.Default.Lock,
+                            Icons.Default.Star,
                         contentDescription = null,
                         tint = if (achievement.isUnlocked)
                             MaterialTheme.colorScheme.primary
@@ -159,8 +191,9 @@ fun AchievementCard(achievement: Achievement) {
                         AchievementType.ECO_BEGINNER -> "${achievement.currentValue.toInt()}/${achievement.targetValue.toInt()} g CO₂"
                         AchievementType.MARKET_MASTER -> "${achievement.currentValue.toInt()}/${achievement.targetValue.toInt()} Trades"
                         AchievementType.GLAETTUNGSMEISTER -> "${achievement.currentValue.toInt()}/${achievement.targetValue.toInt()} Tage"
-                        AchievementType.PROFIT_100 -> "${achievement.currentValue.toInt()}€/${achievement.targetValue.toInt()}€"
-                        else -> "${(achievement.progress * 100).toInt()}%"
+                        AchievementType.PROFIT_100 -> "%.2f € / %d € Gewinn".format(achievement.currentValue, achievement.targetValue.toInt())
+                        AchievementType.TOP10_CO2 -> "Platz ${achievement.currentValue.toInt()}. Noch ${achievement.currentValue.toInt() - achievement.targetValue.toInt()} Plätze"
+                        else -> if (achievement.isUnlocked) "Abgeschlossen!" else "Noch nicht erreicht"
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant

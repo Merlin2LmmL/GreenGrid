@@ -14,7 +14,7 @@ data class Achievement(
     val title: String,
     val description: String,
     val targetValue: Double,
-    val currentValue: Double = 0.0,
+    val currentValue: Double,
     val isUnlocked: Boolean = false
 ) {
     val progress: Float

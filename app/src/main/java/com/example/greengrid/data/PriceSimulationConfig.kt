@@ -19,11 +19,11 @@ object PriceSimulationConfigs {
         rangeHours = 1,
         intervalHours = 1,
         basePrice = 25.0,
-        seasonalAmp = 5.0,
-        dailyAmp = 3.0,
-        weekendOffset = 2.0,
-        noiseAmpLong = 0.7,
-        noiseAmpShort = 0.3,
+        seasonalAmp = -7.0,
+        dailyAmp = -10.0,
+        weekendOffset = -2.0,
+        noiseAmpLong = 1.5,
+        noiseAmpShort = 0.5,
         seedLong = 12345L,
         seedShort = 54321L
     )
