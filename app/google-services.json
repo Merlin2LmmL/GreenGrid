@@ -1,42 +1,42 @@
 {
   "project_info": {
-    "project_number": "10432872635",
-    "firebase_url": "https://greengrid-c6bc8-default-rtdb.europe-west1.firebasedatabase.app",
-    "project_id": "greengrid-c6bc8",
-    "storage_bucket": "greengrid-c6bc8.firebasestorage.app"
+    "project_number": "enter project number",
+    "firebase_url": "enter url",
+    "project_id": "enter project id",
+    "storage_bucket": "enter storage buckt"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:10432872635:android:bbe9a3af04d91fe2b4699e",
+        "mobilesdk_app_id": "enter id",
         "android_client_info": {
           "package_name": "com.example.greengrid"
         }
       },
       "oauth_client": [
         {
-          "client_id": "10432872635-sq3ovb42haleol3ti5bmad6jlp9u0sjl.apps.googleusercontent.com",
+          "client_id": "enter client id",
           "client_type": 1,
           "android_info": {
             "package_name": "com.example.greengrid",
-            "certificate_hash": "e61946071f28b732fe7dea3ef616a6dff702ec72"
+            "certificate_hash": "enter hash"
           }
         },
         {
-          "client_id": "10432872635-hqpgn8th0f1kh6q1gle3qkoieas60sbg.apps.googleusercontent.com",
+          "client_id": "enter client id",
           "client_type": 3
         }
       ],
       "api_key": [
         {
-          "current_key": "AIzaSyBUVB4nKT_ECgG9LMFTYrB0NTosx6-q1s0"
+          "current_key": "enter key"
         }
       ],
       "services": {
         "appinvite_service": {
           "other_platform_oauth_client": [
             {
-              "client_id": "10432872635-hqpgn8th0f1kh6q1gle3qkoieas60sbg.apps.googleusercontent.com",
+              "client_id": "enter client id",
               "client_type": 3
             }
           ]
