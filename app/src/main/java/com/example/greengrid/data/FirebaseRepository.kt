@@ -119,28 +119,54 @@ class FirebaseRepository {
                 capacity = newCapacity,
                 totalBought = if (trade.isBuy) user.totalBought + trade.amount else user.totalBought,
                 totalSold = if (!trade.isBuy) user.totalSold + trade.amount else user.totalSold,
+                averagePurchasePrice = if (trade.isBuy) {
+                    // Calculate new average purchase price
+                    val totalSpent = user.averagePurchasePrice * user.totalBought + (trade.amount * trade.price)
+                    val totalBought = user.totalBought + trade.amount
+                    if (totalBought > 0) totalSpent / totalBought else 0.0
+                } else user.averagePurchasePrice,
                 co2Saved = (user.co2Saved + co2Saved),
-                lastStorageUpdate = (if (trade.isBuy) System.currentTimeMillis() else user.lastStorageUpdate)
+                lastStorageUpdate = (if (trade.isBuy) System.currentTimeMillis() else user.lastStorageUpdate),
+                totalStorageHours = user.totalStorageHours // Will be updated below if needed
             )
 
             // Update user data in database
             userRef.setValue(updatedUser).await()
 
+            // Calculate real trading profit only when selling at a higher price than average purchase price
+            val currentProfit = if (!trade.isBuy && user.averagePurchasePrice > 0) {
+                val profitPerKwh = trade.price - user.averagePurchasePrice
+                if (profitPerKwh > 0) {
+                    profitPerKwh * trade.amount // Only count positive profit
+                } else {
+                    0.0 // No profit if selling at lower price
+                }
+            } else {
+                0.0
+            }
+
             // Update achievements
             achievementManager.updateAchievement(AchievementType.FIRST_TRADE, 1.0)
             achievementManager.updateAchievement(AchievementType.ECO_BEGINNER, updatedUser.co2Saved)
             achievementManager.updateAchievement(AchievementType.MARKET_MASTER, updatedUser.totalBought + updatedUser.totalSold)
-            achievementManager.updateAchievement(AchievementType.PROFIT_100, newBalance - 500)
+            achievementManager.updateAchievement(AchievementType.PROFIT_100, newBalance)
 
-            // Update Glättungsmeister achievement
+            // Update Glättungsmeister achievement - Gesamtspeicherzeit über alle Sessions
             if (trade.isBuy) {
                 // Beim Kauf: Speichere den Zeitpunkt
                 userRef.child("lastStorageUpdate").setValue(System.currentTimeMillis()).await()
             } else {
-                // Beim Verkauf: Berechne die Speicherzeit
+                // Beim Verkauf: Berechne die Speicherzeit für diese Session und addiere zur Gesamtspeicherzeit
                 val storageTimeHours = (System.currentTimeMillis() - user.lastStorageUpdate) / (1000.0 * 60 * 60)
-                val storageDays = storageTimeHours / 24.0
-                achievementManager.updateAchievement(AchievementType.GLAETTUNGSMEISTER, storageDays)
+                val newTotalStorageHours = user.totalStorageHours + storageTimeHours
+                
+                // Update totalStorageHours in database
+                userRef.child("totalStorageHours").setValue(newTotalStorageHours).await()
+                
+                // Update achievement with total storage hours (target: 24 hours)
+                achievementManager.updateAchievement(AchievementType.GLAETTUNGSMEISTER, newTotalStorageHours)
+                
+                Log.d("TradeDebug", "Storage session: ${storageTimeHours}h, Total storage: ${newTotalStorageHours}h")
             }
 
             // Update CO2 Champion achievement
@@ -151,10 +177,15 @@ class FirebaseRepository {
                 .indexOfFirst { it.id == userId }
                 .let { if (it == -1) allUsers.size else it + 1 }
 
+            // Fix: Store the actual rank (lower is better for top 10)
+            // If user is in top 10, store their rank (1-10), otherwise store a large number
+            val achievementValue = if (userRank <= 10) userRank.toDouble() else 999.0
+            
             achievementManager.updateAchievement(
                 AchievementType.TOP10_CO2,
-                userRank.toDouble()
+                achievementValue
             )
+            Log.d("TradeDebug", "Position in CO2 Leaderboard: $userRank, Achievement value: $achievementValue")
 
             // Store the trade in the database with correct format
             val tradeRef = database.getReference("market/trades").push()
@@ -195,9 +226,9 @@ class FirebaseRepository {
                         }
                     }.sortedBy { it.timestamp }
                     
-                    // Generate base price history
+                    // Generate base price history for a longer range to capture historical trades
                     val basePrices = simulatePriceHistory(
-                        rangeHours = PriceSimulationConfigs.defaultParams.rangeHours,
+                        rangeHours = 24 * 7, // 1 Woche für bessere historische Abdeckung
                         basePrice = PriceSimulationConfigs.defaultParams.basePrice,
                         seasonalAmp = PriceSimulationConfigs.defaultParams.seasonalAmp,
                         dailyAmp = PriceSimulationConfigs.defaultParams.dailyAmp,
@@ -206,7 +237,7 @@ class FirebaseRepository {
                         noiseAmpShort = PriceSimulationConfigs.defaultParams.noiseAmpShort,
                         seedLong = PriceSimulationConfigs.defaultParams.seedLong,
                         seedShort = PriceSimulationConfigs.defaultParams.seedShort,
-                        intervalHours = PriceSimulationConfigs.defaultParams.intervalHours
+                        intervalHours = 1 // Stündliche Auflösung für präzise Trade-Impacts
                     )
                     
                     // Calculate price impact from trades
@@ -267,9 +298,9 @@ class FirebaseRepository {
 
     suspend fun cleanupOldData() {
         try {
-            // Delete trades older than 1 year
+            // Delete trades older than 1 week (since we only use 1 week for price impact calculation)
             val now = Instant.now()
-            val oneYearAgo = now.minus(365, ChronoUnit.DAYS)
+            val oneWeekAgo = now.minus(7, ChronoUnit.DAYS)
             val tradesRef = database.getReference("market/trades")
             val tradesSnapshot = tradesRef.get().await()
             
@@ -277,7 +308,7 @@ class FirebaseRepository {
             for (tradeSnapshot in tradesSnapshot.children) {
                 try {
                     val trade = tradeSnapshot.getValue(Trade::class.java)
-                    if (trade != null && trade.timestamp < oneYearAgo.toEpochMilli()) {
+                    if (trade != null && trade.timestamp < oneWeekAgo.toEpochMilli()) {
                         tradeSnapshot.ref.removeValue().await()
                         deletedCount++
                     }
@@ -285,7 +316,9 @@ class FirebaseRepository {
                     Log.e("FirebaseRepository", "Error cleaning up trade data", e)
                 }
             }
-            if (deletedCount > 0)Log.d("FirebaseRepository", "Successfully cleaned up old trade data. Deleted $deletedCount old trades")
+            if (deletedCount > 0) {
+                Log.d("FirebaseRepository", "Successfully cleaned up old trade data. Deleted $deletedCount old trades")
+            }
         } catch (e: Exception) {
             Log.e("FirebaseRepository", "Error during data cleanup", e)
         }
@@ -313,7 +346,10 @@ class FirebaseRepository {
                         maxCapacity = (data["maxCapacity"] as? Number)?.toDouble() ?: 100.0,
                         totalBought = (data["totalBought"] as? Number)?.toDouble() ?: 0.0,
                         totalSold = (data["totalSold"] as? Number)?.toDouble() ?: 0.0,
-                        co2Saved = (data["co2Saved"] as? Number)?.toDouble() ?: 0.0
+                        averagePurchasePrice = (data["averagePurchasePrice"] as? Number)?.toDouble() ?: 0.0,
+                        co2Saved = (data["co2Saved"] as? Number)?.toDouble() ?: 0.0,
+                        lastStorageUpdate = (data["lastStorageUpdate"] as? Number)?.toLong() ?: System.currentTimeMillis(),
+                        totalStorageHours = (data["totalStorageHours"] as? Number)?.toDouble() ?: 0.0
                     ))
                 } catch (e: Exception) {
                     Log.e("FirebaseRepository", "Error processing user data for ID: ${userSnapshot.key}", e)
@@ -344,6 +380,22 @@ class FirebaseRepository {
         } catch (e: Exception) {
             Log.e("FirebaseRepository", "Error getting current user", e)
             null
+        }
+    }
+
+    suspend fun updateUser(user: User): Result<Unit> {
+        return try {
+            val userId = auth.currentUser?.uid ?: throw Exception("User not logged in")
+            val userRef = database.getReference("users/$userId")
+            
+            // Update the user data in the database
+            userRef.setValue(user).await()
+            
+            Log.d("FirebaseRepository", "User updated successfully: balance=${user.balance}, maxCapacity=${user.maxCapacity}")
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e("FirebaseRepository", "Error updating user", e)
+            Result.failure(e)
         }
     }
 } 

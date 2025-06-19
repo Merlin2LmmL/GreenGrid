@@ -4,13 +4,15 @@ data class User(
     val id: String = "",
     val email: String = "",
     val username: String = "",
-    val balance: Double = 0.0,
+    var balance: Double = 0.0,
     val capacity: Double = 0.0,
-    val maxCapacity: Double = 100.0,
+    var maxCapacity: Double = 100.0,
     val co2Saved: Double = 0.0,
     val totalBought: Double = 0.0,
     val totalSold: Double = 0.0,
-    val lastStorageUpdate: Long = System.currentTimeMillis()
+    val averagePurchasePrice: Double = 0.0,
+    val lastStorageUpdate: Long = System.currentTimeMillis(),
+    val totalStorageHours: Double = 0.0
 )
 
 data class Trade(

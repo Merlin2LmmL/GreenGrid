@@ -1,7 +1,6 @@
 package com.example.greengrid.ui
 
 import android.util.Log
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -13,17 +12,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.copy
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.drawText
-import androidx.compose.ui.text.rememberTextMeasurer
 import com.example.greengrid.data.FirebaseRepository
 import com.example.greengrid.data.User
 import com.example.greengrid.data.Trade
@@ -40,6 +30,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.window.Dialog
@@ -50,8 +41,8 @@ import com.example.greengrid.notification.AutoTradingWorker
 import java.util.concurrent.TimeUnit
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.ui.text.style.TextAlign
+import com.example.greengrid.ui.components.PriceGraph
 
 @Composable
 fun StromboerseScreen(
@@ -81,6 +72,15 @@ fun StromboerseScreen(
     // Tab selection
     var selectedTab by remember { mutableStateOf(0) }
     val tabs = listOf("Strombörse", "Bestenliste")
+
+    // Shop dialog state
+    var showShopDialog by remember { mutableStateOf(false) }
+
+    val shopOptions = listOf(
+        ShopItem(1.0, 400.0),
+        ShopItem(5.0, 1800.0),
+        ShopItem(10.0, 3400.0)
+    )
 
     // Function to start/stop background auto trading
     fun toggleBackgroundAutoTrading(enabled: Boolean) {
@@ -239,6 +239,7 @@ fun StromboerseScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .weight(1f)
                         .verticalScroll(rememberScrollState())
                 ) {
                     // Zeitbereichs-Buttons gleichmäßig verteilt, kleine Schrift, wenig Padding
@@ -266,7 +267,9 @@ fun StromboerseScreen(
                     PriceGraph(
                         priceHistory = combinedPriceHistory,
                         colorScheme = MaterialTheme.colorScheme,
-                        mode = selectedRangeIndex
+                        mode = selectedRangeIndex,
+                        height = 200,
+                        showHover = true
                     )
 
                     Spacer(Modifier.height(16.dp))
@@ -435,35 +438,27 @@ fun StromboerseScreen(
                                                 isBuy = true,
                                                 timestamp = System.currentTimeMillis()
                                             )
-                                            Log.d("StromboerseScreen", "Executing trade with user ID: ${currentUser.id}")
                                             val result = repository.executeTrade(trade)
-                                            Log.d("StromboerseScreen", "Trade result: $result")
                                             if (result.isSuccess) {
                                                 tradeCounter++
-                                                delay(1000)
-                                                frozenTotalValue = null
-                                                delay(1000)
-                                                lastTradePrice = null
+                                                Log.d("StromboerseScreen", "Buy trade executed successfully")
                                             } else {
-                                                Log.e("StromboerseScreen", "Trade failed: ${result.exceptionOrNull()}")
+                                                Log.e("StromboerseScreen", "Buy trade failed: ${result.exceptionOrNull()}")
                                             }
                                         } catch (e: Exception) {
-                                            Log.e("StromboerseScreen", "Error executing trade", e)
+                                            Log.e("StromboerseScreen", "Error executing buy trade", e)
                                         }
                                     }
-                                } else {
-                                    Log.d("StromboerseScreen", "Buy button disabled. Amount: $amount, Balance: ${currentUser.balance}, Capacity: ${currentUser.capacity}, MaxCapacity: ${currentUser.maxCapacity}")
                                 }
                             },
                             enabled = canBuy,
-                            shape = RoundedCornerShape(12.dp),
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = if (canBuy) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary,
-                                contentColor = if (canBuy) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondary
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                contentColor = MaterialTheme.colorScheme.onPrimary
                             ),
-                            modifier = Modifier.height(40.dp)
+                            modifier = Modifier.weight(1f)
                         ) {
-                            Text("Kaufen", fontSize = 14.sp)
+                            Text("Kaufen")
                         }
 
                         Spacer(Modifier.width(8.dp))
@@ -471,131 +466,279 @@ fun StromboerseScreen(
                         Button(
                             onClick = {
                                 if (canSell) {
+                                    Log.d("StromboerseScreen", "Sell button clicked. Amount: $amount, Current price: $currentPrice")
+                                    if (currentUser.id.isEmpty()) {
+                                        Log.e("StromboerseScreen", "Cannot execute trade: User ID is empty")
+                                        return@Button
+                                    }
                                     scope.launch {
-                                        lastTradePrice = currentPrice
-                                        frozenTotalValue = currentUser.balance + currentUser.capacity * currentPrice / 100.0
-                                        val trade = Trade(
-                                            userId = currentUser.id,
-                                            amount = amount,
-                                            price = currentPrice,
-                                            isBuy = false,
-                                            timestamp = System.currentTimeMillis()
-                                        )
-                                        val result = repository.executeTrade(trade)
-                                        if (result.isSuccess) {
-                                            tradeCounter++
-                                            delay(1000)
-                                            frozenTotalValue = null
-                                            delay(1000)
-                                            lastTradePrice = null
+                                        try {
+                                            lastTradePrice = currentPrice
+                                            frozenTotalValue = currentUser.balance + currentUser.capacity * currentPrice / 100.0
+                                            val trade = Trade(
+                                                userId = currentUser.id,
+                                                amount = amount,
+                                                price = currentPrice,
+                                                isBuy = false,
+                                                timestamp = System.currentTimeMillis()
+                                            )
+                                            val result = repository.executeTrade(trade)
+                                            if (result.isSuccess) {
+                                                tradeCounter++
+                                                Log.d("StromboerseScreen", "Sell trade executed successfully")
+                                            } else {
+                                                Log.e("StromboerseScreen", "Sell trade failed: ${result.exceptionOrNull()}")
+                                            }
+                                        } catch (e: Exception) {
+                                            Log.e("StromboerseScreen", "Error executing sell trade", e)
                                         }
                                     }
                                 }
                             },
                             enabled = canSell,
-                            shape = RoundedCornerShape(12.dp),
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = if (canSell) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary,
-                                contentColor = if (canSell) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondary
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                contentColor = MaterialTheme.colorScheme.onPrimary
                             ),
-                            modifier = Modifier.height(40.dp)
+                            modifier = Modifier.weight(1f)
                         ) {
-                            Text("Verkaufen", fontSize = 14.sp)
+                            Text("Verkaufen")
                         }
                     }
 
-                    Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(16.dp))
 
-                    // Auto Trading Row
-                    Row(
+                    // Auto Trading Section
+                    Card(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceEvenly,
-                        verticalAlignment = Alignment.CenterVertically
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer
+                        ),
+                        elevation = CardDefaults.cardElevation(2.dp)
                     ) {
-                        Button(
-                            onClick = { showAutoTradingDialog = true },
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.secondary,
-                                contentColor = MaterialTheme.colorScheme.onSecondary
-                            ),
-                            modifier = Modifier.weight(1f).height(40.dp).padding(end = 4.dp)
-                        ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
                             Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.Center
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(
-                                    Icons.Default.Settings,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp)
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        "Auto Trading",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        "Automatische Käufe und Verkäufe basierend auf Preisschwellen",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        modifier = Modifier.padding(top = 2.dp)
+                                    )
+                                }
+                                Switch(
+                                    checked = isAutoTradingEnabled,
+                                    onCheckedChange = { isAutoTradingEnabled = it },
+                                    colors = SwitchDefaults.colors(
+                                        checkedThumbColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        checkedTrackColor = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.5f),
+                                        uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        uncheckedTrackColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                                    )
                                 )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Auto Trading", fontSize = 14.sp)
                             }
-                        }
-
-                        Button(
-                            onClick = {
-                                isAutoTradingEnabled = !isAutoTradingEnabled
-                            },
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = if (isAutoTradingEnabled) 
-                                    MaterialTheme.colorScheme.error 
-                                else 
-                                    MaterialTheme.colorScheme.primary,
-                                contentColor = if (isAutoTradingEnabled) 
-                                    MaterialTheme.colorScheme.onError 
-                                else 
-                                    MaterialTheme.colorScheme.onPrimary
-                            ),
-                            modifier = Modifier.weight(1f).height(40.dp).padding(start = 4.dp)
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.Center
-                            ) {
-                                Icon(
-                                    if (isAutoTradingEnabled) Icons.Default.Build else Icons.Default.PlayArrow,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    if (isAutoTradingEnabled) "Stop" else "Start",
-                                    fontSize = 14.sp
-                                )
+                            if (isAutoTradingEnabled) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        Icons.Default.Build,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        "Hintergrundprozess aktiv",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Button(
+                                    onClick = { showAutoTradingDialog = true },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        contentColor = MaterialTheme.colorScheme.primaryContainer
+                                    ),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text("Einstellungen")
+                                }
                             }
                         }
                     }
 
-                    // Auto Trading Status
-                    if (isAutoTradingEnabled) {
-                        Spacer(Modifier.height(8.dp))
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.primaryContainer
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    // Shop Button
+                    Button(
+                        onClick = { showShopDialog = true },
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.secondary,
+                            contentColor = MaterialTheme.colorScheme.onSecondary
+                        ),
+                        modifier = Modifier.fillMaxWidth().height(48.dp)
+                    ) {
+                        Icon(Icons.Default.ShoppingCart, contentDescription = "Shop", modifier = Modifier.size(20.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Batterie-Shop", fontSize = 16.sp)
+                    }
+
+                    HorizontalDivider(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                        thickness = 2.dp,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Trading Platform Information (below trading interface)
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surface
+                        ),
+                        elevation = CardDefaults.cardElevation(1.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp)
+                        ) {
+                            Text(
+                                "🏢 GreenGrid Strombörse",
+                                style = MaterialTheme.typography.titleLarge,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(bottom = 12.dp)
                             )
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(12.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
+                            
+                            Text(
+                                "Die GreenGrid Strombörse ist eine simulierte Handelsplattform für Bildungszwecke. " +
+                                "Hier können Sie das Prinzip des Stromhandels in einer sicheren, virtuellen Umgebung erlernen. " +
+                                "Alle Transaktionen erfolgen mit Spielgeld - es werden keine echten Zahlungen getätigt.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                modifier = Modifier.padding(bottom = 12.dp)
+                            )
+                            
+                            Text(
+                                "Peer-to-Peer Handel:",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(bottom = 8.dp)
+                            )
+                            
+                            Text(
+                                "Die Preise werden durch eine Kombination aus Spieleraktivität und simulierten Marktmechanismen bestimmt. " +
+                                "Das Angebot und die Nachfrage aller Spieler beeinflussen die Preise, zusätzlich wird eine realistische " +
+                                "Preisbildung durch mehrere Sinuskurven und Rauschen simuliert. Dies erzeugt erkennbare Muster wie " +
+                                "Tages- und Nachtschwankungen, Wochenend-Effekte und saisonale Trends, ähnlich wie in echten Strombörsen.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                modifier = Modifier.padding(bottom = 8.dp)
+                            )
+                            
+                            Text(
+                                "Preisbildung:",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(bottom = 8.dp)
+                            )
+                            
+                            Text(
+                                "• Spieleraktivität: Angebot und Nachfrage beeinflussen die Preise direkt\n" +
+                                "• Tages-/Sessionsrythmus: Sinuskurven simulieren typische Verbrauchsmuster\n" +
+                                "• Wochentrends: Unterschiede zwischen Werktagen und Wochenenden\n" +
+                                "• Marktvolatilität: Rauschen simuliert unvorhersehbare Marktbewegungen",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                modifier = Modifier.padding(bottom = 12.dp)
+                            )
+                            
+                            Text(
+                                "Lernziel:",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(bottom = 8.dp)
+                            )
+                            
+                            Text(
+                                "• Verstehen Sie die Grundprinzipien des Stromhandels\n" +
+                                "• Lernen Sie, Angebot und Nachfrage zu nutzen\n" +
+                                "• Entwickeln Sie Strategien für optimales Timing\n" +
+                                "• Erfahren Sie, wie Marktmechanismen funktionieren",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                modifier = Modifier.padding(bottom = 12.dp)
+                            )
+                            
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.errorContainer
+                                )
                             ) {
-                                Text(
-                                    "Auto Trading aktiv (Hintergrund)",
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    "Kauf: ${buyThreshold}ct | Verkauf: ${sellThreshold}ct | Menge: ${tradeAmount}kWh",
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    fontSize = 12.sp
-                                )
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Text(
+                                        "💰 Simulierte Handelsgebühren:",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = MaterialTheme.colorScheme.onErrorContainer,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        "• 5% Steuern auf jeden Trade (simuliert)\n" +
+                                        "• 0,10€ Netzsteuer pro Kauf (simuliert)\n" +
+                                        "• Alle Transaktionen erfolgen mit virtuellem Guthaben",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onErrorContainer
+                                    )
+                                }
                             }
                         }
                     }
+                }
+
+                // Shop Dialog
+                if (showShopDialog) {
+                    ShopDialog(
+                        currentCapacity = currentUser.maxCapacity,
+                        balance = currentUser.balance,
+                        onBuy = { extraCapacity, price ->
+                            if (currentUser.balance >= price) {
+                                currentUser.maxCapacity += extraCapacity
+                                currentUser.balance -= price
+                                // Update user data in database
+                                scope.launch {
+                                    try {
+                                        repository.updateUser(currentUser)
+                                        Log.d("Shop", "User data updated successfully after purchase")
+                                    } catch (e: Exception) {
+                                        Log.e("Shop", "Error updating user data after purchase", e)
+                                        // Optionally revert the changes if database update fails
+                                        currentUser.maxCapacity -= extraCapacity
+                                        currentUser.balance += price
+                                    }
+                                }
+                                showShopDialog = false
+                            }
+                        },
+                        onDismiss = { showShopDialog = false },
+                        shopOptions = shopOptions
+                    )
                 }
             }
             1 -> {
@@ -973,171 +1116,64 @@ fun AutoTradingDialog(
     }
 }
 
+data class ShopItem(val capacity: Double, val price: Double)
+
 @Composable
-fun PriceGraph(
-    priceHistory: List<PricePoint>,
-    colorScheme: ColorScheme,
-    mode: Int
+fun ShopDialog(
+    currentCapacity: Double,
+    balance: Double,
+    onBuy: (Double, Double) -> Unit,
+    onDismiss: () -> Unit,
+    shopOptions: List<ShopItem>
 ) {
-    val textMeasurer = rememberTextMeasurer()
-
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(200.dp)
-            .background(colorScheme.surface, RoundedCornerShape(16.dp))
-    ) {
-        if (priceHistory.size >= 2) {
-            Canvas(modifier = Modifier.fillMaxSize()) {
-                val leftMargin = 40.dp.toPx()
-                val rightMargin = 16.dp.toPx()
-                val topMargin = 8.dp.toPx()
-                val bottomMargin = 30.dp.toPx()
-
-                val graphWidth = size.width - leftMargin - rightMargin
-                val graphHeight = size.height - topMargin - bottomMargin
-
-                val originX = leftMargin
-                val originY = topMargin + graphHeight
-
-                val minPrice = priceHistory.minOf { it.price }
-                val maxPrice = priceHistory.maxOf { it.price }
-                val priceRange = (maxPrice - minPrice).coerceAtLeast(0.1)
-
-                drawLine(
-                    color = colorScheme.onSurface,
-                    start = Offset(originX, topMargin),
-                    end = Offset(originX, originY),
-                    strokeWidth = 1f
-                )
-                drawLine(
-                    color = colorScheme.onSurface,
-                    start = Offset(originX, originY),
-                    end = Offset(originX + graphWidth, originY),
-                    strokeWidth = 1f
-                )
-
-                val segmentsY = 4
-                for (i in 0..segmentsY) {
-                    val fraction = i.toFloat() / segmentsY
-                    val y = topMargin + fraction * graphHeight
-                    val price = maxPrice - fraction * priceRange
-                    drawLine(
-                        color = colorScheme.onSurface,
-                        start = Offset(originX - 4.dp.toPx(), y),
-                        end = Offset(originX, y),
-                        strokeWidth = 1f
-                    )
-                    val priceText = "%.1f".format(price)
-                    val textLayout = textMeasurer.measure(AnnotatedString(priceText))
-                    val textX = originX - 6.dp.toPx() - textLayout.size.width
-                    val textY = y - textLayout.size.height / 2f
-                    drawText(
-                        textMeasurer = textMeasurer,
-                        text = priceText,
-                        topLeft = Offset(textX, textY),
-                        style = TextStyle(
-                            color = colorScheme.onSurface,
-                            fontSize = 12.sp
-                        )
-                    )
-                }
-
-                val pointCount = priceHistory.size
-                val labelIndices = mutableListOf<Int>()
-                if (pointCount <= 24) {
-                    labelIndices += (0 until pointCount)
-                } else {
-                    labelIndices += 0
-                    val maxMiddle = 22
-                    val step = (pointCount - 1).toFloat() / (maxMiddle + 1)
-                    for (k in 1..maxMiddle) {
-                        val idx = (k * step).toInt().coerceIn(1, pointCount - 2)
-                        if (labelIndices.lastOrNull() != idx) {
-                            labelIndices += idx
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            shape = RoundedCornerShape(16.dp),
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Icon(Icons.Default.ShoppingCart, contentDescription = null, modifier = Modifier.size(40.dp))
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("Batterie-Shop", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("Erweitere deinen Speicher realistisch und investiere in größere Batterien!", style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center)
+                Spacer(modifier = Modifier.height(16.dp))
+                Text("Aktuelle Kapazität: ${"%.1f".format(currentCapacity)} kWh", style = MaterialTheme.typography.bodyLarge)
+                Text("Guthaben: ${"%.2f".format(balance)} €", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.primary)
+                Spacer(modifier = Modifier.height(16.dp))
+                shopOptions.forEach { item ->
+                    Card(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column {
+                                Text("+${item.capacity.toInt()} kWh Speicher", style = MaterialTheme.typography.titleMedium)
+                                Text("Preis: ${"%.2f".format(item.price)} €", style = MaterialTheme.typography.bodyMedium)
+                            }
+                            Button(
+                                onClick = { onBuy(item.capacity, item.price) },
+                                enabled = balance >= item.price,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (balance >= item.price) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                                    contentColor = if (balance >= item.price) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            ) {
+                                Text("Kaufen")
+                            }
                         }
                     }
-                    labelIndices += pointCount - 1
                 }
-
-                val shortTimeFormat = SimpleDateFormat("HH", Locale.getDefault())
-                val shortWeekFormat = SimpleDateFormat("E", Locale.getDefault())
-                val shortMonthFormat = SimpleDateFormat("dd", Locale.getDefault())
-                val shortYearFormat = SimpleDateFormat("MM.yy", Locale.getDefault())
-
-                val minSpacing = 4.dp.toPx()
-                var lastLabelEndX = Float.NEGATIVE_INFINITY
-
-                for (index in labelIndices) {
-                    val pricePoint = priceHistory[index]
-                    val x = originX + (index.toFloat() / (pointCount - 1)) * graphWidth
-
-                    val rawLabel = when (mode) {
-                        0 -> shortTimeFormat.format(Date(pricePoint.timestamp))
-                        1 -> shortWeekFormat.format(Date(pricePoint.timestamp))
-                        2 -> shortMonthFormat.format(Date(pricePoint.timestamp))
-                        else -> shortYearFormat.format(Date(pricePoint.timestamp))
-                    }
-
-                    val textLayout = textMeasurer.measure(AnnotatedString(rawLabel))
-                    val textX = x - textLayout.size.width / 2f
-                    val textY = originY + 4.dp.toPx() + 2.dp.toPx()
-
-                    if (textX > lastLabelEndX + minSpacing && textX + textLayout.size.width < size.width) {
-                        drawLine(
-                            color = colorScheme.onSurface,
-                            start = Offset(x, originY),
-                            end = Offset(x, originY + 4.dp.toPx()),
-                            strokeWidth = 1f
-                        )
-                        drawText(
-                            textMeasurer = textMeasurer,
-                            text = rawLabel,
-                            topLeft = Offset(textX, textY),
-                            style = TextStyle(
-                                color = colorScheme.onSurface,
-                                fontSize = 12.sp
-                            )
-                        )
-                        lastLabelEndX = textX + textLayout.size.width
-                    }
-                }
-
-                val path = Path()
-                priceHistory.forEachIndexed { index, pricePoint ->
-                    val x = originX + (index.toFloat() / (pointCount - 1)) * graphWidth
-                    val y = originY - ((pricePoint.price - minPrice) / priceRange * graphHeight).toFloat()
-                    if (index == 0) {
-                        path.moveTo(x, y)
-                    } else {
-                        path.lineTo(x, y)
-                    }
-                }
-
-                val gradient = Brush.verticalGradient(
-                    colors = listOf(
-                        colorScheme.primary.copy(alpha = 0.2f),
-                        colorScheme.primary.copy(alpha = 0.0f)
-                    ),
-                    startY = 0f,
-                    endY = graphHeight
-                )
-
-                val fillPath = path.copy()
-                fillPath.lineTo(originX + graphWidth, originY)
-                fillPath.lineTo(originX, originY)
-                fillPath.close()
-
-                drawPath(
-                    path = fillPath,
-                    brush = gradient
-                )
-
-                drawPath(
-                    path = path,
-                    color = colorScheme.primary,
-                    style = Stroke(width = 2f)
-                )
+                Spacer(modifier = Modifier.height(12.dp))
+                TextButton(onClick = onDismiss) { Text("Schließen") }
             }
         }
     }

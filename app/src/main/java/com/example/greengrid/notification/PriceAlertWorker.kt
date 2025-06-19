@@ -32,16 +32,27 @@ class PriceAlertWorker(
             // Tiefpunkt-Alarm prüfen
             if (preferences.isMinPriceAlertActive && priceMinimum != null) {
                 val now = System.currentTimeMillis()
-                val minTime = priceMinimum.timestamp * 1000
+                val minTime = priceMinimum.timestamp
                 val timeUntilMin = minTime - now
 
-                // Wenn wir uns der Tiefpunkt-Stunde nähern (15 Minuten vorher)
-                if (timeUntilMin in 0..(15 * 60 * 1000)) {
+                // Debug: Log timing information
+                val currentDate = java.util.Date(now)
+                val minDate = java.util.Date(minTime)
+                println("Debug: Current time: $currentDate")
+                println("Debug: Minimum time: $minDate")
+                println("Debug: Time until minimum: ${timeUntilMin / (1000 * 60)} minutes")
+
+                // Benachrichtigung 15 Minuten vor dem Tiefpunkt senden
+                // WorkManager läuft alle 15 Minuten, also prüfen wir einen 20-Minuten-Zeitraum
+                if (timeUntilMin in 0..(20 * 60 * 1000)) {
+                    println("Debug: Sending minimum price notification!")
                     notificationManager.showMinPriceNotification(
                         priceMinimum.hour,
-                        priceMinimum.price
+                        priceMinimum.price,
+                        priceMinimum.timestamp
                     )
                     preferences.isMinPriceAlertActive = false
+                    println("Debug: Minimum price alert deactivated")
                 }
             }
 

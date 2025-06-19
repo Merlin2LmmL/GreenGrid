@@ -7,8 +7,7 @@ import androidx.work.WorkerParameters
 import com.example.greengrid.data.PriceAlertPreferences
 import com.example.greengrid.data.FirebaseRepository
 import com.example.greengrid.data.Trade
-import com.example.greengrid.data.simulatePriceHistory
-import com.example.greengrid.data.PriceSimulationConfigs
+import com.example.greengrid.data.fetchCurrentPrice
 import kotlinx.coroutines.delay
 
 class AutoTradingWorker(
@@ -93,21 +92,8 @@ class AutoTradingWorker(
     }
 
     private suspend fun getCurrentPrice(): Double {
-        // Use the same price simulation as in the UI
-        val config = PriceSimulationConfigs.getConfigForTimeRange(0) // Daily view
-        val priceHistory = simulatePriceHistory(
-            rangeHours = config.rangeHours,
-            basePrice = config.basePrice,
-            seasonalAmp = config.seasonalAmp,
-            dailyAmp = config.dailyAmp,
-            weekendOffset = config.weekendOffset,
-            noiseAmpLong = config.noiseAmpLong,
-            noiseAmpShort = config.noiseAmpShort,
-            seedLong = config.seedLong,
-            seedShort = config.seedShort,
-            intervalHours = config.intervalHours
-        )
-        return priceHistory.lastOrNull()?.price ?: config.basePrice
+        // Use real API data from aWATTar instead of simulation
+        return fetchCurrentPrice() ?: 25.0 // Fallback to base price if API fails
     }
 
     private fun showNotification(title: String, message: String) {

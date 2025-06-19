@@ -55,7 +55,7 @@ class PriceAlertNotificationManager(private val context: Context) {
         notificationManager.notify(1, notification)
     }
 
-    fun showMinPriceNotification(hour: Int, price: Double) {
+    fun showMinPriceNotification(hour: Int, price: Double, timestamp: Long) {
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
         }
@@ -66,10 +66,24 @@ class PriceAlertNotificationManager(private val context: Context) {
             PendingIntent.FLAG_IMMUTABLE
         )
 
+        // Bestimme, ob es heute oder morgen ist
+        val calendar = java.util.Calendar.getInstance()
+        calendar.timeInMillis = timestamp
+        
+        val today = java.util.Calendar.getInstance()
+        val tomorrow = java.util.Calendar.getInstance()
+        tomorrow.add(java.util.Calendar.DAY_OF_YEAR, 1)
+        
+        val dateText = when {
+            calendar.get(java.util.Calendar.DAY_OF_YEAR) == today.get(java.util.Calendar.DAY_OF_YEAR) -> "heute"
+            calendar.get(java.util.Calendar.DAY_OF_YEAR) == tomorrow.get(java.util.Calendar.DAY_OF_YEAR) -> "morgen"
+            else -> "am ${java.text.SimpleDateFormat("dd.MM.", java.util.Locale.GERMAN).format(java.util.Date(timestamp))}"
+        }
+
         val notification = NotificationCompat.Builder(context, channelId)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle("Tiefpunkt des Strompreises")
-            .setContentText("In 15 Minuten (${hour}:00 Uhr) ist der Tiefpunkt des Tages mit ${"%.2f".format(price)} ct/kWh")
+            .setContentText("In 15 Minuten (${hour}:00 Uhr $dateText) ist der Tiefpunkt mit ${"%.2f".format(price)} ct/kWh")
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setAutoCancel(true)
             .setContentIntent(pendingIntent)

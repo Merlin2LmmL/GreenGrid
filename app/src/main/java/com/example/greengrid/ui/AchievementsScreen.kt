@@ -29,6 +29,11 @@ fun AchievementsScreen() {
     val achievementManager = remember { AchievementManager(context) }
     val achievements by achievementManager.achievements.collectAsState()
 
+    // Developer mode flag (später ggf. aus BuildConfig oder AppPreferences)
+    val isDeveloperMode = true
+    var showResetDialog by remember { mutableStateOf(false) }
+    var resetSuccess by remember { mutableStateOf(false) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -42,6 +47,50 @@ fun AchievementsScreen() {
             color = MaterialTheme.colorScheme.onBackground,
             modifier = Modifier.padding(bottom = 16.dp)
         )
+
+        // Experimental Reset Button (nur im Developer Mode)
+        if (isDeveloperMode) {
+            Button(
+                onClick = { showResetDialog = true },
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+                modifier = Modifier.padding(bottom = 12.dp)
+            ) {
+                Text("Alle Achievements zurücksetzen (Experimentell)", color = MaterialTheme.colorScheme.onErrorContainer)
+            }
+        }
+
+        if (showResetDialog) {
+            AlertDialog(
+                onDismissRequest = { showResetDialog = false },
+                title = { Text("Achievements zurücksetzen?") },
+                text = { Text("Bist du sicher, dass du alle Achievements zurücksetzen möchtest? Dieser Vorgang kann nicht rückgängig gemacht werden.") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        achievementManager.resetAchievements()
+                        showResetDialog = false
+                        resetSuccess = true
+                    }) {
+                        Text("Zurücksetzen", color = MaterialTheme.colorScheme.error)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showResetDialog = false }) {
+                        Text("Abbrechen")
+                    }
+                }
+            )
+        }
+        if (resetSuccess) {
+            LaunchedEffect(Unit) {
+                kotlinx.coroutines.delay(1200)
+                resetSuccess = false
+            }
+            Text(
+                "Alle Achievements wurden zurückgesetzt!",
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+        }
 
         LazyColumn(
             modifier = Modifier.weight(1f),
@@ -86,27 +135,42 @@ fun AchievementCard(achievement: Achievement) {
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Icon(
-                        imageVector = if (achievement.isUnlocked)
+                        imageVector = if (achievement.isUnlocked && achievement.stage >= achievement.totalStages)
                             Icons.Default.Check
                         else
                             Icons.Default.Star,
                         contentDescription = null,
-                        tint = if (achievement.isUnlocked)
+                        tint = if (achievement.isUnlocked && achievement.stage >= achievement.totalStages)
                             MaterialTheme.colorScheme.primary
                         else
                             MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Text(
-                        text = achievement.title,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = if (achievement.isUnlocked)
-                            MaterialTheme.colorScheme.onSurface
-                        else
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Column {
+                        Text(
+                            text = achievement.title,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = if (achievement.isUnlocked && achievement.stage >= achievement.totalStages)
+                                MaterialTheme.colorScheme.onSurface
+                            else
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        if (achievement.totalStages > 1) {
+                            Text(
+                                text = "Stufe ${achievement.stage}/${achievement.totalStages}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
                 }
-                if (!achievement.isUnlocked) {
+                if (achievement.isUnlocked && achievement.stage >= achievement.totalStages) {
+                    Text(
+                        text = "Abgeschlossen",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                } else {
                     Text(
                         text = "${(achievement.progress * 100).toInt()}%",
                         style = MaterialTheme.typography.bodyMedium,
@@ -120,47 +184,76 @@ fun AchievementCard(achievement: Achievement) {
             Text(
                 text = achievement.description,
                 style = MaterialTheme.typography.bodyMedium,
-                color = if (achievement.isUnlocked)
+                color = if (achievement.isUnlocked && achievement.stage >= achievement.totalStages)
                     MaterialTheme.colorScheme.onSurface
                 else
                     MaterialTheme.colorScheme.onSurfaceVariant
             )
 
             Spacer(modifier = Modifier.height(8.dp))
-            // Eigene ProgressBar: dünner und mit grauer Hintergrundleiste
+            
+            // Progress bar - use progress for current stage only
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(4.dp)
+                    .height(8.dp)
             ) {
-                // Hintergrund: immer 100% gefüllt, grau
+                // Background: always 100% filled, gray
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .background(
-                            color = MaterialTheme.colorScheme.surfaceTint,
-                            shape = RoundedCornerShape(2.dp)
+                            color = MaterialTheme.colorScheme.surfaceTint.copy(alpha = 0.3f),
+                            shape = RoundedCornerShape(4.dp)
                         )
                 )
-                // Fortschritt: farbig, Breite nach progress
+                // Progress: colored, width based on current stage progress
                 Box(
                     modifier = Modifier
                         .fillMaxHeight()
-                        .fillMaxWidth(fraction = achievement.progress.coerceIn(0f, 1f))
+                        .fillMaxWidth(fraction = if (achievement.isUnlocked && achievement.stage >= achievement.totalStages) 1f else achievement.progress.coerceIn(0f, 1f))
                         .background(
-                            color = MaterialTheme.colorScheme.primary,
-                            shape = RoundedCornerShape(2.dp)
+                            color = if (achievement.isUnlocked && achievement.stage >= achievement.totalStages) 
+                                MaterialTheme.colorScheme.primary 
+                            else 
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
+                            shape = RoundedCornerShape(4.dp)
                         )
                 )
             }
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = when (achievement.type) {
-                    AchievementType.ECO_BEGINNER -> "${achievement.currentValue.toInt()}/${achievement.targetValue.toInt()} g CO₂"
-                    AchievementType.MARKET_MASTER -> "${achievement.currentValue.toInt()}/${achievement.targetValue.toInt()} Trades"
-                    AchievementType.GLAETTUNGSMEISTER -> "${achievement.currentValue.toInt()}/${achievement.targetValue.toInt()} Tage"
-                    AchievementType.PROFIT_100 -> "%.2f € / %d € Gewinn".format(achievement.currentValue, achievement.targetValue.toInt())
-                    AchievementType.TOP10_CO2 -> "Platz ${achievement.currentValue.toInt()}. Noch ${achievement.currentValue.toInt() - achievement.targetValue.toInt()} Plätze"
+                    AchievementType.ECO_BEGINNER -> {
+                        when (achievement.stage) {
+                            1 -> "${achievement.currentValue.toInt()}/100 g CO₂"
+                            2 -> "${achievement.currentValue.toInt()}/1.000 g CO₂"
+                            3 -> "${achievement.currentValue.toInt()}/10.000 g CO₂"
+                            else -> "${achievement.currentValue.toInt()}/${achievement.targetValue.toInt()} g CO₂"
+                        }
+                    }
+                    AchievementType.MARKET_MASTER -> {
+                        when (achievement.stage) {
+                            1 -> "${achievement.currentValue.toInt()}/1 Trade"
+                            2 -> "${achievement.currentValue.toInt()}/100 Trades"
+                            3 -> "${achievement.currentValue.toInt()}/500 Trades"
+                            else -> "${achievement.currentValue.toInt()}/${achievement.targetValue.toInt()} Trades"
+                        }
+                    }
+                    AchievementType.GLAETTUNGSMEISTER -> "${achievement.currentValue.toInt()}/${achievement.targetValue.toInt()} Stunden"
+                    AchievementType.PROFIT_100 -> "%.2f € / %d € Trading-Gewinn".format(achievement.currentValue, achievement.targetValue.toInt())
+                    AchievementType.TOP10_CO2 -> {
+                        if (achievement.isUnlocked) {
+                            "Platz ${achievement.currentValue.toInt()} - Top 10 erreicht!"
+                        } else {
+                            val currentRank = achievement.currentValue.toInt()
+                            if (currentRank == 999) {
+                                "Noch nicht in den Top 10"
+                            } else {
+                                "Platz ${currentRank} - Noch ${currentRank - 10} Plätze bis Top 10"
+                            }
+                        }
+                    }
                     else -> if (achievement.isUnlocked) "Abgeschlossen!" else "Noch nicht erreicht"
                 },
                 style = MaterialTheme.typography.bodySmall,

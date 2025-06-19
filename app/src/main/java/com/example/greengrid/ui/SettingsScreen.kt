@@ -14,9 +14,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import com.example.greengrid.data.AppPreferences
 import com.example.greengrid.ui.theme.ThemeState
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import com.example.greengrid.ui.PrivacyDialog
 
 @Composable
 fun SettingsScreen(
@@ -43,6 +47,8 @@ fun SettingsScreen(
         ThemeState.overrideSystemTheme = overrideSystemTheme
         ThemeState.darkTheme = darkTheme
     }
+
+    var showPrivacyDialog by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -72,25 +78,25 @@ fun SettingsScreen(
                 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column {
-                        Text(
-                            "Name",
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                        Text(
-                            currentName,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    IconButton(onClick = { showNameDialog = true }) {
-                        Icon(Icons.Default.Edit, contentDescription = "Name ändern")
-                    }
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        "Name",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Text(
+                        currentName,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                IconButton(onClick = { showNameDialog = true }) {
+                    Icon(Icons.Default.Edit, contentDescription = "Name ändern")
                 }
             }
+        }
         }
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -189,7 +195,7 @@ fun SettingsScreen(
             elevation = CardDefaults.cardElevation(2.dp)
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Row(
+            Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -212,14 +218,14 @@ fun SettingsScreen(
                 // System Theme überschreiben
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column {
-                        Text(
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
                             "Theme überschreiben",
-                            style = MaterialTheme.typography.titleMedium
-                        )
+                        style = MaterialTheme.typography.titleMedium
+                    )
                         Text(
                             "Systemeinstellungen ignorieren",
                             style = MaterialTheme.typography.bodyMedium,
@@ -305,10 +311,7 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.height(16.dp))
                 
                 Button(
-                    onClick = {
-                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(appPreferences.privacyUrl))
-                        context.startActivity(intent)
-                    },
+                    onClick = { showPrivacyDialog = true },
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.primaryContainer
@@ -316,7 +319,7 @@ fun SettingsScreen(
                 ) {
                     Icon(Icons.Default.Info, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Datenschutzerklärung", color = MaterialTheme.colorScheme.onPrimaryContainer)
+                    Text("Datenschutzerklärung & AGB", color = MaterialTheme.colorScheme.onPrimaryContainer)
                 }
             }
         }
@@ -435,8 +438,8 @@ fun SettingsScreen(
                         )
                     ) {
                         Icon(Icons.Default.ExitToApp, contentDescription = null)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Abmelden")
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Abmelden")
                     }
                 }
             }
@@ -475,6 +478,10 @@ fun SettingsScreen(
                     }
                 }
             )
+        }
+
+        if (showPrivacyDialog) {
+            PrivacyDialog(onDismiss = { showPrivacyDialog = false })
         }
     }
 } 

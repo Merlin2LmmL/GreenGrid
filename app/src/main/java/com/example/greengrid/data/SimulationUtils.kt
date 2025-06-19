@@ -6,8 +6,6 @@ import java.time.ZoneId
 import java.time.temporal.ChronoUnit
 import java.util.Random
 
-import com.example.greengrid.data.PricePoint
-
 fun simulatePriceHistory(
     rangeHours: Long,
     intervalHours: Long,
@@ -23,7 +21,7 @@ fun simulatePriceHistory(
     require(intervalHours > 0) { "intervalHours muss größer als 0 sein" }
     val now = Instant.ofEpochMilli(System.currentTimeMillis()).truncatedTo(ChronoUnit.HOURS)
     val pointsCount = (rangeHours / intervalHours).toInt() + 1
-    val startHour = now.minus((pointsCount - 1L) * intervalHours, ChronoUnit.HOURS).plus(6, ChronoUnit.HOURS)
+    val startHour = now.minus((pointsCount - 1L) * intervalHours, ChronoUnit.HOURS)
     val zone = ZoneId.systemDefault()
 
     val randLong = Random(seedLong)
