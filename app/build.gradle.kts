@@ -6,11 +6,11 @@ plugins {
 }
 
 android {
-    namespace = "com.example.greengrid"
+    namespace = "com.greengrid.app"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.example.greengrid"
+        applicationId = "com.greengrid.app"
         minSdk = 30
         targetSdk = 35
         versionCode = 1
@@ -19,9 +19,19 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        create("release") {
+            storeFile = file("greengrid-release-key.jks")
+            storePassword = "Line2&12%"
+            keyAlias = "greengrid-release-key"
+            keyPassword = "Line2&12%"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -49,6 +59,7 @@ dependencies {
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
+    implementation(libs.androidx.room.runtime.android)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
@@ -73,4 +84,7 @@ dependencies {
 
     // WorkManager
     implementation("androidx.work:work-runtime-ktx:2.8.1")
+
+    // Lottie Compose
+    implementation("com.airbnb.android:lottie-compose:6.3.0")
 }

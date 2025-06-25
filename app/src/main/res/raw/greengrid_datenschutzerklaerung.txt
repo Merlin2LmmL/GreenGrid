@@ -1,0 +1,58 @@
+GreenGrid – Datenschutzerklärung & Nutzungsbedingungen
+
+1. Verantwortliche Stelle
+Dietrich-Bonhoeffer-Gymnasium Oberasbach (Schulprojekt)
+Vertreten durch: Merlin Ortner (haftender)
+An der Steige 24, 90614 Ammerndorf
+E-Mail: ortnermerlin@gmail.com
+
+2. Welche Daten wir erheben und warum
+- E-Mail-Adresse: Für die Kontoerstellung, Passwortzurücksetzung, Support
+- Benutzername (öffentlich sichtbar): Anzeige in Bestenlisten und Profilen
+- Spielfortschritt, Punktestand und Ranking: Speicherung Ihres Spielverlaufs
+- Chatbot-Nachrichten: Ihre Eingaben im KI-Chatbot werden zur Beantwortung an einen externen KI-Dienst (z.B. Google Gemini) übermittelt und verarbeitet. Die Nutzung des Chatbots ist freiwillig.
+- Reports: Wenn Sie eine Chatbot-Antwort melden, werden die gemeldete Nachricht, der Grund und Ihre Nutzer-ID gespeichert, um Missbrauch zu verhindern und die Qualität zu sichern.
+
+3. Dienste von Drittanbietern (Firebase & KI-Dienste)
+Wir verwenden folgende Dienste:
+- Google Firebase (Google Ireland Ltd.):
+  - Firebase Authentication: Nutzeranmeldung und -verwaltung
+  - Firebase Realtime Database: Speicherung von Spielfortschritt, Bestenlisten und Reports
+- Externer KI-Dienst (z.B. Google Gemini, USA): Verarbeitung Ihrer Chatbot-Eingaben zur Generierung von Antworten
+Weitere Informationen zum Datenschutz bei Firebase:
+https://firebase.google.com/support/privacy
+Weitere Informationen zum Datenschutz bei Google Gemini:
+https://policies.google.com/privacy
+
+4. Datenübermittlung in Drittländer
+Daten können in die USA übermittelt werden. Die Übermittlung erfolgt auf Grundlage der EU-Standardvertragsklauseln gemäß Art. 46 DSGVO.
+
+5. Rechtsgrundlagen der Verarbeitung (gemäß DSGVO)
+- Art. 6 Abs. 1 lit. b: Erfüllung des Nutzungsvertrags (z.B. Kontoerstellung)
+- Art. 6 Abs. 1 lit. f: Berechtigtes Interesse (App-Optimierung, Ranglisten, Missbrauchsverhinderung)
+- Art. 6 Abs. 1 lit. a: Einwilligung (Nutzung des KI-Chatbots)
+
+6. Datenweitergabe
+Wir geben Ihre personenbezogenen Daten nicht an Dritte weiter, außer an die genannten Dienstleister im Rahmen der Auftragsverarbeitung.
+
+7. Speicherdauer
+Ihre Daten werden gespeichert, solange Ihr Konto besteht. Bei Kontolöschung werden alle personenbezogenen Daten innerhalb von 30 Tagen gelöscht. Reports werden nach Abschluss der Bearbeitung gelöscht.
+
+8. Ihre Rechte
+Sie haben jederzeit das Recht auf Auskunft, Berichtigung, Löschung, Einschränkung der Verarbeitung, Widerspruch und Datenübertragbarkeit. Sie können sich bei der zuständigen Aufsichtsbehörde beschweren.
+
+9. Datensicherheit
+Wir setzen technische und organisatorische Maßnahmen ein, um Ihre Daten vor unbefugtem Zugriff zu schützen.
+
+10. Änderungen
+Diese Datenschutzerklärung kann aktualisiert werden. Die jeweils aktuelle Version ist jederzeit in der App und unter dem bereitgestellten Link einsehbar.
+
+Nutzungsbedingungen & AGB
+1. Geltungsbereich: Für registrierte Nutzerinnen und Nutzer der App GreenGrid
+2. Registrierung: Benutzername und E-Mail-Adresse erforderlich
+3. Nutzungsverhalten: Kein Missbrauch; Manipulation der Bestenliste verboten
+4. Korrektur von Spielfortschritt: Wir behalten uns vor, Werte in der Datenbank (z.B. Punktestand, CO₂-Einsparung, Spielfortschritt) zu verändern oder zu korrigieren, wenn wir feststellen, dass diese durch technische Fehler (Bugs) oder durch unfaires Verhalten (z.B. Ausnutzen von Schwachstellen, Manipulation) entstanden sind. Dies dient der Fairness und Integrität des Spiels.
+5. Verfügbarkeit: Keine Garantie für permanente Verfügbarkeit der App
+6. Haftung: Nur bei Vorsatz oder grober Fahrlässigkeit durch den Betreiber
+7. Änderungen: Bedingungen können angepasst werden; Nutzer werden informiert
+8. Zustimmung: Mit Kontoerstellung stimmen Sie dieser Erklärung zu 

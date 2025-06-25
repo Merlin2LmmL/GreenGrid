@@ -10,7 +10,7 @@
       "client_info": {
         "mobilesdk_app_id": "1:10432872635:android:bbe9a3af04d91fe2b4699e",
         "android_client_info": {
-          "package_name": "com.example.greengrid"
+          "package_name": "com.greengrid.app"
         }
       },
       "oauth_client": [
@@ -18,7 +18,7 @@
           "client_id": "10432872635-sq3ovb42haleol3ti5bmad6jlp9u0sjl.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
-            "package_name": "com.example.greengrid",
+            "package_name": "com.greengrid.app",
             "certificate_hash": "e61946071f28b732fe7dea3ef616a6dff702ec72"
           }
         },
